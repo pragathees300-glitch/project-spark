@@ -3,26 +3,38 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { createUserNotification } from '@/hooks/useUserInAppNotifications';
+import { Json } from '@/integrations/supabase/types';
 
 export interface ProofOfWork {
   id: string;
   user_id: string;
-  work_title: string;
-  link_url: string;
+  work_title: string | null;
+  work_type: string;
   product_link: string | null;
-  proof_images: string[];
-  notes: string | null;
+  proof_url: string | null;
+  proof_urls: string[];
+  description: string | null;
   status: 'pending' | 'approved' | 'rejected';
-  admin_remark: string | null;
+  admin_notes: string | null;
+  rejection_reason: string | null;
   reviewed_by: string | null;
   created_at: string;
   reviewed_at: string | null;
-  updated_at: string;
+  commission_amount: number | null;
 }
 
 export interface ProofOfWorkWithUser extends ProofOfWork {
   user_name?: string;
   user_email?: string;
+}
+
+// Helper to parse proof_urls from Json
+function parseProofUrls(urls: Json | null): string[] {
+  if (!urls) return [];
+  if (Array.isArray(urls)) {
+    return urls.filter((u): u is string => typeof u === 'string');
+  }
+  return [];
 }
 
 // User: Fetch own proofs
@@ -31,7 +43,7 @@ export function useMyProofs() {
 
   return useQuery({
     queryKey: ['my-proofs', user?.id],
-    queryFn: async () => {
+    queryFn: async (): Promise<ProofOfWork[]> => {
       const { data, error } = await supabase
         .from('proof_of_work')
         .select('*')
@@ -39,7 +51,23 @@ export function useMyProofs() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as ProofOfWork[];
+      return (data || []).map(p => ({
+        id: p.id,
+        user_id: p.user_id,
+        work_title: p.work_title,
+        work_type: p.work_type,
+        product_link: p.product_link,
+        proof_url: p.proof_url,
+        proof_urls: parseProofUrls(p.proof_urls),
+        description: p.description,
+        status: p.status as ProofOfWork['status'],
+        admin_notes: p.admin_notes,
+        rejection_reason: p.rejection_reason,
+        reviewed_by: p.reviewed_by,
+        created_at: p.created_at,
+        reviewed_at: p.reviewed_at,
+        commission_amount: p.commission_amount ? Number(p.commission_amount) : null,
+      }));
     },
     enabled: !!user?.id,
   });
@@ -51,7 +79,7 @@ export function useAllProofs(statusFilter?: string) {
 
   return useQuery({
     queryKey: ['all-proofs', statusFilter],
-    queryFn: async () => {
+    queryFn: async (): Promise<ProofOfWorkWithUser[]> => {
       let query = supabase
         .from('proof_of_work')
         .select('*')
@@ -77,11 +105,25 @@ export function useAllProofs(statusFilter?: string) {
         (profiles || []).map((p) => [p.user_id, { name: p.name, email: p.email }])
       );
 
-      return (data || []).map((proof) => ({
-        ...proof,
-        user_name: profileMap.get(proof.user_id)?.name || 'Unknown',
-        user_email: profileMap.get(proof.user_id)?.email || '',
-      })) as ProofOfWorkWithUser[];
+      return (data || []).map((p): ProofOfWorkWithUser => ({
+        id: p.id,
+        user_id: p.user_id,
+        work_title: p.work_title,
+        work_type: p.work_type,
+        product_link: p.product_link,
+        proof_url: p.proof_url,
+        proof_urls: parseProofUrls(p.proof_urls),
+        description: p.description,
+        status: p.status as ProofOfWork['status'],
+        admin_notes: p.admin_notes,
+        rejection_reason: p.rejection_reason,
+        reviewed_by: p.reviewed_by,
+        created_at: p.created_at,
+        reviewed_at: p.reviewed_at,
+        commission_amount: p.commission_amount ? Number(p.commission_amount) : null,
+        user_name: profileMap.get(p.user_id)?.name || 'Unknown',
+        user_email: profileMap.get(p.user_id)?.email || '',
+      }));
     },
     enabled: user?.role === 'admin',
   });
@@ -114,18 +156,18 @@ export function useSubmitProof() {
   return useMutation({
     mutationFn: async (data: {
       work_title: string;
-      link_url: string;
+      work_type: string;
       product_link?: string;
-      proof_images: string[];
-      notes?: string;
+      proof_urls: string[];
+      description?: string;
     }) => {
       const { error } = await supabase.from('proof_of_work').insert({
         user_id: user?.id,
         work_title: data.work_title,
-        link_url: data.link_url,
+        work_type: data.work_type,
         product_link: data.product_link || null,
-        proof_images: data.proof_images,
-        notes: data.notes || null,
+        proof_urls: data.proof_urls,
+        description: data.description || null,
         status: 'pending',
       });
 
@@ -188,7 +230,7 @@ export function useUpdateProofStatus() {
         .from('proof_of_work')
         .update({
           status: data.status,
-          admin_remark: data.admin_remark || null,
+          admin_notes: data.admin_remark || null,
           reviewed_by: user?.id,
           reviewed_at: new Date().toISOString(),
         })
@@ -251,7 +293,7 @@ export function useBulkUpdateProofStatus() {
         .from('proof_of_work')
         .update({
           status: data.status,
-          admin_remark: data.admin_remark || null,
+          admin_notes: data.admin_remark || null,
           reviewed_by: user?.id,
           reviewed_at: new Date().toISOString(),
         })

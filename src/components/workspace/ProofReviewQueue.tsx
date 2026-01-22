@@ -196,20 +196,22 @@ export const ProofReviewQueue: React.FC = () => {
                     <p className="text-sm text-muted-foreground">
                       Submitted on {format(new Date(proof.created_at), 'PPp')}
                     </p>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                      <span className="flex items-center gap-1">
-                        <ImageIcon className="w-4 h-4" />
-                        {proof.proof_images.length} image{proof.proof_images.length !== 1 ? 's' : ''}
-                      </span>
-                      <a
-                        href={proof.link_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 hover:text-primary transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        Video/Post Link
-                      </a>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <ImageIcon className="w-4 h-4" />
+                          {proof.proof_urls.length} image{proof.proof_urls.length !== 1 ? 's' : ''}
+                        </span>
+                        {proof.product_link && (
+                          <a
+                            href={proof.product_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 hover:text-primary transition-colors"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            Video/Post Link
+                          </a>
+                        )}
                       {proof.product_link && (
                         <a
                           href={proof.product_link}
@@ -285,45 +287,33 @@ export const ProofReviewQueue: React.FC = () => {
 
               <div>
                 <p className="text-sm font-medium mb-1">Video / Post Link</p>
-                <a
-                  href={selectedProof.link_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline flex items-center gap-1"
-                >
-                  {selectedProof.link_url}
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-
-              {selectedProof.product_link && (
-                <div>
-                  <p className="text-sm font-medium mb-1">Product Link</p>
+                {selectedProof.product_link ? (
                   <a
                     href={selectedProof.product_link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-orange-600 hover:underline flex items-center gap-1"
+                    className="text-primary hover:underline flex items-center gap-1"
                   >
-                    <ShoppingBag className="w-4 h-4 mr-1" />
                     {selectedProof.product_link}
                     <ExternalLink className="w-4 h-4" />
                   </a>
-                </div>
-              )}
+                ) : (
+                  <span className="text-muted-foreground">No link provided</span>
+                )}
+              </div>
 
-              {selectedProof.notes && (
+              {selectedProof.description && (
                 <div>
                   <p className="text-sm font-medium mb-1">User Notes</p>
                   <p className="text-sm text-muted-foreground p-3 bg-muted rounded-lg">
-                    {selectedProof.notes}
+                    {selectedProof.description}
                   </p>
                 </div>
               )}
 
               <div>
                 <p className="text-sm font-medium mb-3">Proof Images</p>
-                <ProofImageGallery images={selectedProof.proof_images} />
+                <ProofImageGallery images={selectedProof.proof_urls} />
               </div>
 
               <DialogFooter className="gap-2">

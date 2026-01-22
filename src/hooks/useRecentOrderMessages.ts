@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export interface RecentOrderMessage {
   id: string;
   order_id: string;
-  sender_type: 'user' | 'customer' | 'system';
+  sender_role: 'user' | 'admin' | 'system';
   message: string;
   is_read: boolean;
   created_at: string;
@@ -21,7 +21,7 @@ export const useRecentOrderMessages = (limit: number = 50) => {
       // Fetch recent messages with order info
       const { data: messagesData, error: messagesError } = await supabase
         .from('order_chat_messages')
-        .select('id, order_id, sender_type, message, is_read, created_at')
+        .select('id, order_id, sender_role, message, is_read, created_at')
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -45,9 +45,9 @@ export const useRecentOrderMessages = (limit: number = 50) => {
       return messagesData.map((msg): RecentOrderMessage => ({
         id: msg.id,
         order_id: msg.order_id,
-        sender_type: msg.sender_type as 'user' | 'customer' | 'system',
+        sender_role: msg.sender_role as 'user' | 'admin' | 'system',
         message: msg.message,
-        is_read: msg.is_read,
+        is_read: msg.is_read || false,
         created_at: msg.created_at,
         order_number: orderMap.get(msg.order_id) || 'Unknown',
       }));

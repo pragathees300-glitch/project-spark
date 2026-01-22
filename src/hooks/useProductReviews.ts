@@ -1,37 +1,33 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface ProductReview {
   id: string;
   product_id: string;
-  storefront_product_id: string | null;
-  customer_name: string;
-  customer_email: string;
+  user_id: string;
   rating: number;
   review_text: string | null;
-  is_verified_purchase: boolean;
   is_approved: boolean;
   created_at: string;
 }
 
 interface SubmitReviewData {
   product_id: string;
-  storefront_product_id?: string;
-  customer_name: string;
-  customer_email: string;
   rating: number;
   review_text?: string;
 }
 
 export const useProductReviews = (productId: string | undefined) => {
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Fetch approved reviews for a product
   const reviewsQuery = useQuery({
     queryKey: ['product-reviews', productId],
-    queryFn: async () => {
+    queryFn: async (): Promise<ProductReview[]> => {
       if (!productId) return [];
 
       const { data, error } = await supabase
@@ -46,7 +42,15 @@ export const useProductReviews = (productId: string | undefined) => {
         throw error;
       }
 
-      return data as ProductReview[];
+      return (data || []).map(r => ({
+        id: r.id,
+        product_id: r.product_id,
+        user_id: r.user_id,
+        rating: r.rating,
+        review_text: r.review_text,
+        is_approved: r.is_approved || false,
+        created_at: r.created_at,
+      }));
     },
     enabled: !!productId,
   });
@@ -65,17 +69,16 @@ export const useProductReviews = (productId: string | undefined) => {
   // Submit a new review
   const submitReviewMutation = useMutation({
     mutationFn: async (data: SubmitReviewData) => {
+      if (!user?.id) throw new Error('Not authenticated');
+      
       const { error } = await supabase
         .from('product_reviews')
         .insert({
           product_id: data.product_id,
-          storefront_product_id: data.storefront_product_id || null,
-          customer_name: data.customer_name,
-          customer_email: data.customer_email,
+          user_id: user.id,
           rating: data.rating,
           review_text: data.review_text || null,
           is_approved: false, // Reviews require admin approval
-          is_verified_purchase: false,
         });
 
       if (error) throw error;
@@ -87,7 +90,7 @@ export const useProductReviews = (productId: string | undefined) => {
       });
       queryClient.invalidateQueries({ queryKey: ['product-reviews', productId] });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error('Error submitting review:', error);
       toast({
         title: 'Error',

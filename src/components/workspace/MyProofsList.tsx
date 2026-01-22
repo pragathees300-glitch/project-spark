@@ -89,21 +89,23 @@ export const MyProofsList: React.FC = () => {
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <ImageIcon className="w-4 h-4" />
-                        {proof.proof_images.length} image{proof.proof_images.length !== 1 ? 's' : ''}
+                        {proof.proof_urls.length} image{proof.proof_urls.length !== 1 ? 's' : ''}
                       </span>
-                      <a
-                        href={proof.link_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 hover:text-primary transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        View Link
-                      </a>
+                      {proof.product_link && (
+                        <a
+                          href={proof.product_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 hover:text-primary transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          View Link
+                        </a>
+                      )}
                     </div>
-                    {proof.admin_remark && (
+                    {proof.admin_notes && (
                       <p className="text-sm mt-2 p-2 bg-muted rounded-md">
-                        <span className="font-medium">Admin Remark:</span> {proof.admin_remark}
+                        <span className="font-medium">Admin Remark:</span> {proof.admin_notes}
                       </p>
                     )}
                   </div>
@@ -141,34 +143,38 @@ export const MyProofsList: React.FC = () => {
 
               <div>
                 <p className="text-sm font-medium mb-1">Work Link</p>
-                <a
-                  href={selectedProof.link_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline flex items-center gap-1"
-                >
-                  {selectedProof.link_url}
-                  <ExternalLink className="w-4 h-4" />
-                </a>
+                {selectedProof.product_link ? (
+                  <a
+                    href={selectedProof.product_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline flex items-center gap-1"
+                  >
+                    {selectedProof.product_link}
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">No link provided</span>
+                )}
               </div>
 
-              {selectedProof.notes && (
+              {selectedProof.description && (
                 <div>
                   <p className="text-sm font-medium mb-1">Notes</p>
-                  <p className="text-sm text-muted-foreground">{selectedProof.notes}</p>
+                  <p className="text-sm text-muted-foreground">{selectedProof.description}</p>
                 </div>
               )}
 
-              {selectedProof.admin_remark && (
+              {selectedProof.admin_notes && (
                 <div className="p-3 bg-muted rounded-lg">
                   <p className="text-sm font-medium mb-1">Admin Remark</p>
-                  <p className="text-sm text-muted-foreground">{selectedProof.admin_remark}</p>
+                  <p className="text-sm text-muted-foreground">{selectedProof.admin_notes}</p>
                 </div>
               )}
 
               <div>
                 <p className="text-sm font-medium mb-3">Proof Images</p>
-                <ProofImageGallery images={selectedProof.proof_images} />
+                <ProofImageGallery images={selectedProof.proof_urls} />
               </div>
             </div>
           )}

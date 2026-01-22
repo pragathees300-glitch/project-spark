@@ -187,51 +187,157 @@ export const useAdminPostpaid = () => {
 
       return (profiles || []).map(p => ({
         user_id: p.user_id,
-        name: p.name,
-        email: p.email,
-        postpaid_enabled: p.postpaid_enabled,
-        postpaid_credit_limit: Number(p.postpaid_credit_limit),
-        postpaid_used: Number(p.postpaid_used),
+        name: p.name || 'Unknown',
+        email: p.email || '',
+        postpaid_enabled: p.postpaid_enabled || false,
+        postpaid_credit_limit: Number(p.postpaid_credit_limit) || 0,
+        postpaid_used: Number(p.postpaid_used) || 0,
         postpaid_due_cycle: p.postpaid_due_cycle,
-        wallet_balance: Number(p.wallet_balance),
-        available_credit: Math.max(0, Number(p.postpaid_credit_limit) - Number(p.postpaid_used)),
+        wallet_balance: Number(p.wallet_balance) || 0,
+        available_credit: Math.max(0, Number(p.postpaid_credit_limit || 0) - Number(p.postpaid_used || 0)),
         allow_payout_with_dues: Boolean(p.allow_payout_with_dues),
       }));
     },
     enabled: !!user && user.role === 'admin' && !!session,
   });
 
-  const togglePostpaid = async ({ userId, enabled }: { userId: string; enabled: boolean }) => {
-    const { error } = await supabase.from('profiles').update({ postpaid_enabled: enabled }).eq('user_id', userId);
-    if (error) throw error;
-    queryClient.invalidateQueries({ queryKey: ['admin-postpaid-users'] });
-  };
+  const togglePostpaidMutation = useMutation({
+    mutationFn: async ({ userId, enabled }: { userId: string; enabled: boolean }) => {
+      const { error } = await supabase.from('profiles').update({ postpaid_enabled: enabled }).eq('user_id', userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-postpaid-users'] });
+      toast({ title: 'Success', description: 'Postpaid status updated.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
 
-  const updateCreditLimit = async ({ userId, creditLimit }: { userId: string; creditLimit: number }) => {
-    const { error } = await supabase.from('profiles').update({ postpaid_credit_limit: creditLimit }).eq('user_id', userId);
-    if (error) throw error;
-    queryClient.invalidateQueries({ queryKey: ['admin-postpaid-users'] });
-  };
+  const updateCreditLimitMutation = useMutation({
+    mutationFn: async ({ userId, creditLimit }: { userId: string; creditLimit: number }) => {
+      const { error } = await supabase.from('profiles').update({ postpaid_credit_limit: creditLimit }).eq('user_id', userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-postpaid-users'] });
+      toast({ title: 'Success', description: 'Credit limit updated.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
 
-  const updateDueCycle = async ({ userId, dueCycle }: { userId: string; dueCycle: string | null }) => {
-    const { error } = await supabase.from('profiles').update({ postpaid_due_cycle: dueCycle }).eq('user_id', userId);
-    if (error) throw error;
-    queryClient.invalidateQueries({ queryKey: ['admin-postpaid-users'] });
-  };
+  const updateDueCycleMutation = useMutation({
+    mutationFn: async ({ userId, dueCycle }: { userId: string; dueCycle: number | null }) => {
+      const { error } = await supabase.from('profiles').update({ postpaid_due_cycle: dueCycle ? String(dueCycle) : null }).eq('user_id', userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-postpaid-users'] });
+      toast({ title: 'Success', description: 'Due cycle updated.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
 
-  const toggleAllowPayoutWithDues = async ({ userId, allow }: { userId: string; allow: boolean }) => {
-    const { error } = await supabase.from('profiles').update({ allow_payout_with_dues: allow }).eq('user_id', userId);
+  const toggleAllowPayoutWithDuesMutation = useMutation({
+    mutationFn: async ({ userId, allow }: { userId: string; allow: boolean }) => {
+      const { error } = await supabase.from('profiles').update({ allow_payout_with_dues: allow }).eq('user_id', userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-postpaid-users'] });
+      toast({ title: 'Success', description: 'Payout permission updated.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const adjustBalanceMutation = useMutation({
+    mutationFn: async ({ userId, amount, reason }: { userId: string; amount: number; reason: string }) => {
+      // Get current postpaid_used
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('postpaid_used')
+        .eq('user_id', userId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      const currentUsed = Number(profile.postpaid_used) || 0;
+      const newUsed = Math.max(0, currentUsed + amount);
+
+      // Update profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ postpaid_used: newUsed })
+        .eq('user_id', userId);
+
+      if (updateError) throw updateError;
+
+      // Record transaction
+      const { error: txError } = await supabase
+        .from('postpaid_transactions')
+        .insert({
+          user_id: userId,
+          amount: Math.abs(amount),
+          transaction_type: 'adjustment',
+          description: reason,
+          balance_after: newUsed,
+        });
+
+      if (txError) throw txError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-postpaid-users'] });
+      toast({ title: 'Success', description: 'Balance adjusted successfully.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const fetchUserTransactions = async (userId: string): Promise<PostpaidTransaction[]> => {
+    const { data, error } = await supabase
+      .from('postpaid_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
     if (error) throw error;
-    queryClient.invalidateQueries({ queryKey: ['admin-postpaid-users'] });
+
+    return (data || []).map(t => ({
+      id: t.id,
+      user_id: t.user_id,
+      amount: Number(t.amount),
+      transaction_type: t.transaction_type as PostpaidTransaction['transaction_type'],
+      description: t.description,
+      reference_id: t.reference_id,
+      balance_after: t.balance_after ? Number(t.balance_after) : null,
+      created_at: t.created_at,
+    }));
   };
 
   return {
     usersWithPostpaid: usersWithPostpaidQuery.data || [],
+    users: usersWithPostpaidQuery.data || [],
     isLoading: usersWithPostpaidQuery.isLoading,
-    togglePostpaid,
-    updateCreditLimit,
-    updateDueCycle,
-    toggleAllowPayoutWithDues,
+    togglePostpaid: togglePostpaidMutation.mutate,
+    isTogglingPostpaid: togglePostpaidMutation.isPending,
+    updateCreditLimit: updateCreditLimitMutation.mutate,
+    isUpdatingCreditLimit: updateCreditLimitMutation.isPending,
+    updateDueCycle: updateDueCycleMutation.mutate,
+    isUpdatingDueCycle: updateDueCycleMutation.isPending,
+    toggleAllowPayoutWithDues: toggleAllowPayoutWithDuesMutation.mutate,
+    isTogglingAllowPayoutWithDues: toggleAllowPayoutWithDuesMutation.isPending,
+    adjustBalance: adjustBalanceMutation.mutate,
+    isAdjustingBalance: adjustBalanceMutation.isPending,
+    fetchUserTransactions,
     refetch: usersWithPostpaidQuery.refetch,
   };
 };

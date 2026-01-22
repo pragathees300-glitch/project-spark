@@ -35,7 +35,7 @@ export const useRotatingSupportName = () => {
     const fetchNames = async () => {
       try {
         const { data, error } = await supabase
-          .from('indian_names')
+          .from('indian_names_list')
           .select('name')
           .eq('is_active', true);
 

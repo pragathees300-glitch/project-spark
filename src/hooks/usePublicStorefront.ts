@@ -26,34 +26,36 @@ export interface StoreOwner {
 }
 
 export const usePublicStorefront = (slug: string | undefined) => {
-  // Fetch store owner by slug using secure function that only exposes public fields
+  // Fetch store owner by slug using profiles table directly
   const storeQuery = useQuery({
     queryKey: ['public-store', slug],
     queryFn: async () => {
       if (!slug) return null;
 
       const { data, error } = await supabase
-        .rpc('get_public_storefront_profile', { _slug: slug });
+        .from('profiles')
+        .select('user_id, name, storefront_name, storefront_slug, storefront_banner_url')
+        .eq('storefront_slug', slug)
+        .single();
 
       if (error) {
         console.error('Error fetching store:', error);
-        throw error;
+        return null;
       }
 
-      if (!data || data.length === 0) return null;
+      if (!data) return null;
 
-      // Map the function result to our interface
-      const profile = data[0];
       return {
-        user_id: profile.user_id,
-        display_name: profile.display_name,
-        storefront_name: profile.storefront_name,
-        storefront_slug: profile.storefront_slug,
-        storefront_banner: profile.storefront_banner,
+        user_id: data.user_id,
+        display_name: data.name || 'Store',
+        storefront_name: data.storefront_name,
+        storefront_slug: data.storefront_slug,
+        storefront_banner: data.storefront_banner_url,
       } as StoreOwner;
     },
     enabled: !!slug,
   });
+
   // Fetch products for this storefront
   const productsQuery = useQuery({
     queryKey: ['public-storefront-products', storeQuery.data?.user_id],
@@ -65,7 +67,7 @@ export const usePublicStorefront = (slug: string | undefined) => {
         .select(`
           id,
           product_id,
-          selling_price,
+          custom_price,
           custom_description,
           is_active,
           products!inner(
@@ -88,16 +90,16 @@ export const usePublicStorefront = (slug: string | undefined) => {
       return (data || []).map((sp): PublicStorefrontProduct => ({
         id: sp.id,
         product_id: sp.product_id,
-        selling_price: Number(sp.selling_price),
+        selling_price: Number(sp.custom_price) || 0,
         custom_description: sp.custom_description,
-        is_active: sp.is_active,
+        is_active: sp.is_active || false,
         product: {
           id: sp.products.id,
           name: sp.products.name,
           description: sp.products.description,
           image_url: sp.products.image_url,
           category: sp.products.category,
-          stock: sp.products.stock,
+          stock: sp.products.stock || 0,
         },
       }));
     },

@@ -500,16 +500,18 @@ export const useAdminPayouts = () => {
       // Create notification for user
       if (userId && status !== 'pending') {
         try {
-          await createUserNotification(userId, {
-            title: `Payout ${status.charAt(0).toUpperCase() + status.slice(1)}`,
-            message: status === 'approved' 
+          await createUserNotification(
+            userId,
+            status === 'rejected' ? 'warning' : 'success',
+            `Payout ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+            status === 'approved' 
               ? `Your payout request for $${amount.toFixed(2)} has been approved.`
               : status === 'completed'
               ? `Your payout of $${amount.toFixed(2)} has been completed.`
               : `Your payout request for $${amount.toFixed(2)} has been rejected.${adminNotes ? ` Reason: ${adminNotes}` : ''}`,
-            type: status === 'rejected' ? 'warning' : 'success',
-            action_url: '/user/payments',
-          });
+            'payout',
+            payoutId
+          );
         } catch (e) {
           console.error('Failed to create notification:', e);
         }

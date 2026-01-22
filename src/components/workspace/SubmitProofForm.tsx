@@ -31,9 +31,9 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 const formSchema = z.object({
   work_title: z.string().min(1, 'Please select a work type'),
-  link_url: z.string().url('Please enter a valid URL'),
+  work_type: z.string().min(1, 'Please select a work type'),
   product_link: z.string().url('Please enter a valid product URL'),
-  notes: z.string().optional(),
+  description: z.string().optional(),
   confirmation: z.boolean().refine((val) => val === true, {
     message: 'You must confirm that the work is genuine',
   }),
@@ -64,9 +64,9 @@ export const SubmitProofForm: React.FC = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       work_title: '',
-      link_url: '',
+      work_type: '',
       product_link: '',
-      notes: '',
+      description: '',
       confirmation: false,
     },
   });
@@ -75,6 +75,7 @@ export const SubmitProofForm: React.FC = () => {
   React.useEffect(() => {
     if (defaultWorkType && !form.getValues('work_title')) {
       form.setValue('work_title', defaultWorkType.name);
+      form.setValue('work_type', defaultWorkType.name);
     }
   }, [defaultWorkType, form]);
 
@@ -149,10 +150,10 @@ export const SubmitProofForm: React.FC = () => {
       // Submit proof
       await submitProof.mutateAsync({
         work_title: data.work_title,
-        link_url: data.link_url,
+        work_type: data.work_type || data.work_title,
         product_link: data.product_link || undefined,
-        proof_images: imageUrls,
-        notes: data.notes,
+        proof_urls: imageUrls,
+        description: data.description,
       });
 
       // Reset form
@@ -201,7 +202,10 @@ export const SubmitProofForm: React.FC = () => {
 
                       return (
                         <Select
-                          onValueChange={field.onChange}
+                          onValueChange={(val) => {
+                            field.onChange(val);
+                            form.setValue('work_type', val);
+                          }}
                           value={field.value}
                           disabled={isSubmitting}
                         >
@@ -248,28 +252,6 @@ export const SubmitProofForm: React.FC = () => {
                       No work types available. Please contact admin.
                     </div>
                   )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="link_url"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Shared Video / Post Link *</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="url"
-                      placeholder="https://..."
-                      {...field}
-                      disabled={isSubmitting}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Paste the URL of your shared video or post
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -361,7 +343,7 @@ export const SubmitProofForm: React.FC = () => {
 
             <FormField
               control={form.control}
-              name="notes"
+              name="description"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Additional Notes (Optional)</FormLabel>

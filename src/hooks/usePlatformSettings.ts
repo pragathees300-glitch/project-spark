@@ -628,16 +628,18 @@ export const usePlatformSettings = () => {
 
       // Create audit log for setting change
       if (user?.id) {
-        await supabase.rpc('create_audit_log', {
-          _action_type: 'setting_changed',
-          _entity_type: 'platform_settings',
-          _entity_id: null,
-          _user_id: null,
-          _admin_id: user.id,
-          _old_value: oldValue !== undefined ? { [key]: oldValue } : null,
-          _new_value: { [key]: value },
-          _reason: `Platform setting "${key}" updated`,
-        });
+        try {
+          await supabase.rpc('create_audit_log', {
+            p_action: 'setting_changed',
+            p_entity_type: 'platform_settings',
+            p_entity_id: key,
+            p_user_id: user.id,
+            p_old_data: oldValue !== undefined ? { [key]: oldValue } : null,
+            p_new_data: { [key]: value },
+          });
+        } catch (e) {
+          console.error('Failed to create audit log:', e);
+        }
       }
     },
     onSuccess: () => {

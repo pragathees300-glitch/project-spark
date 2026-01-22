@@ -110,13 +110,10 @@ export const useAdminUsers = () => {
       
       // Log the action
       await supabase.rpc('create_audit_log', {
-        _action_type: 'user_level_change',
-        _entity_type: 'profile',
-        _entity_id: userId,
-        _user_id: userId,
-        _admin_id: user?.id,
-        _new_value: { user_level: level },
-        _reason: `User level changed to ${level}`,
+        p_action: 'user_level_change',
+        p_entity_type: 'profile',
+        p_entity_id: userId,
+        p_new_data: { user_level: level },
       });
       
       return level;
@@ -187,13 +184,10 @@ export const useAdminUsers = () => {
       
       // Log the action
       await supabase.rpc('create_audit_log', {
-        _action_type: 'user_status_change',
-        _entity_type: 'profile',
-        _entity_id: userId,
-        _user_id: userId,
-        _admin_id: user?.id,
-        _new_value: { status },
-        _reason: `Status changed to ${status}`,
+        p_action: 'user_status_change',
+        p_entity_type: 'profile',
+        p_entity_id: userId,
+        p_new_data: { status },
       });
       
       return status;
@@ -277,15 +271,10 @@ export const useAdminUsers = () => {
       
       // Log the action
       await supabase.rpc('create_audit_log', {
-        _action_type: 'commission_change',
-        _entity_type: 'profile',
-        _entity_id: userId,
-        _user_id: userId,
-        _admin_id: user?.id,
-        _new_value: { commission_override: commissionOverride },
-        _reason: commissionOverride !== null 
-          ? `Custom commission set to ${commissionOverride}%` 
-          : 'Commission reset to default',
+        p_action: 'commission_change',
+        p_entity_type: 'profile',
+        p_entity_id: userId,
+        p_new_data: { commission_override: commissionOverride },
       });
     },
     onSuccess: () => {

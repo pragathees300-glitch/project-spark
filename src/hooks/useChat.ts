@@ -106,7 +106,7 @@ export const useChat = () => {
           .eq('key', 'chat_welcome_message')
           .maybeSingle();
 
-        const welcomeMessage = welcomeSetting?.value || 
+        const welcomeMessage = (welcomeSetting?.value as string) || 
           'Welcome! Thank you for reaching out. A support agent will be assigned to assist you shortly. Please wait while we connect you with our team.';
 
         await supabase

@@ -65,7 +65,7 @@ export const AdminPostpaidSettings: React.FC<AdminPostpaidSettingsProps> = ({ cl
     postpaid_enabled: boolean;
     postpaid_credit_limit: number;
     postpaid_used: number;
-    postpaid_due_cycle: number | null;
+    postpaid_due_cycle: string | null;
     wallet_balance: number;
     available_credit: number;
     allow_payout_with_dues: boolean;
@@ -173,12 +173,13 @@ export const AdminPostpaidSettings: React.FC<AdminPostpaidSettingsProps> = ({ cl
 
     const creditLimit = parseFloat(newCreditLimit);
     const dueCycle = newDueCycle ? parseInt(newDueCycle) : null;
+    const currentDueCycle = selectedUser.postpaid_due_cycle ? parseInt(selectedUser.postpaid_due_cycle) : null;
 
     if (!isNaN(creditLimit) && creditLimit !== selectedUser.postpaid_credit_limit) {
       updateCreditLimit({ userId: selectedUser.user_id, creditLimit });
     }
 
-    if (dueCycle !== selectedUser.postpaid_due_cycle) {
+    if (dueCycle !== currentDueCycle) {
       updateDueCycle({ userId: selectedUser.user_id, dueCycle });
     }
 

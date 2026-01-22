@@ -4,15 +4,14 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export interface AuditLog {
   id: string;
-  action_type: string;
+  action: string;
   entity_type: string;
   entity_id: string | null;
   user_id: string | null;
-  admin_id: string | null;
-  old_value: Record<string, any> | null;
-  new_value: Record<string, any> | null;
-  reason: string | null;
-  metadata: Record<string, any>;
+  old_data: Record<string, unknown> | null;
+  new_data: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
   created_at: string;
 }
 

@@ -36,51 +36,43 @@ export const useChatReassignmentNotification = () => {
     try {
       const { data: customerName } = await supabase
         .from('chat_customer_names')
-        .select('indian_name_id')
+        .select('indian_name')
         .eq('user_id', user.id)
         .single();
 
-      if (customerName?.indian_name_id) {
-        const { data: nameData } = await supabase
-          .from('indian_names')
-          .select('name')
-          .eq('id', customerName.indian_name_id)
-          .single();
-
-        if (nameData?.name) {
-          const newName = nameData.name;
+      if (customerName?.indian_name) {
+        const newName = customerName.indian_name;
+        
+        // Check if name changed (reassignment happened)
+        if (previousAgentNameRef.current !== 'Support' && 
+            previousAgentNameRef.current !== newName) {
+          // Reassignment detected
+          const eventKey = `${previousAgentNameRef.current}-${newName}-${Date.now()}`;
           
-          // Check if name changed (reassignment happened)
-          if (previousAgentNameRef.current !== 'Support' && 
-              previousAgentNameRef.current !== newName) {
-            // Reassignment detected
-            const eventKey = `${previousAgentNameRef.current}-${newName}-${Date.now()}`;
+          if (!hasShownToastRef.current.has(eventKey)) {
+            hasShownToastRef.current.add(eventKey);
             
-            if (!hasShownToastRef.current.has(eventKey)) {
-              hasShownToastRef.current.add(eventKey);
-              
-              setLastReassignment({
-                previousAgentName: previousAgentNameRef.current,
-                newAgentName: newName,
-                timestamp: new Date(),
-                reason: 'agent_change',
-              });
+            setLastReassignment({
+              previousAgentName: previousAgentNameRef.current,
+              newAgentName: newName,
+              timestamp: new Date(),
+              reason: 'agent_change',
+            });
 
-              // Clear agent disconnected state
-              setAgentDisconnected(null);
+            // Clear agent disconnected state
+            setAgentDisconnected(null);
 
-              // Show toast notification
-              toast({
-                title: 'Support Agent Changed',
-                description: `We have reassigned your chat to ${newName} to assist you.`,
-                duration: 5000,
-              });
-            }
+            // Show toast notification
+            toast({
+              title: 'Support Agent Changed',
+              description: `We have reassigned your chat to ${newName} to assist you.`,
+              duration: 5000,
+            });
           }
-          
-          previousAgentNameRef.current = newName;
-          setCurrentAgentName(newName);
         }
+        
+        previousAgentNameRef.current = newName;
+        setCurrentAgentName(newName);
       }
     } catch (error) {
       console.error('Failed to fetch agent name:', error);
@@ -99,7 +91,7 @@ export const useChatReassignmentNotification = () => {
         .single();
 
       if (session) {
-        setChatStatus(session.status);
+        setChatStatus(session.status || 'active');
         
         // If status changed to waiting_for_support, agent might have disconnected
         if (session.status === 'waiting_for_support' && !session.assigned_agent_id) {

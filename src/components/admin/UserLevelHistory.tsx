@@ -16,7 +16,7 @@ export const UserLevelHistory: React.FC = () => {
   const { logs, isLoading } = useAuditLogs(100);
 
   // Filter logs for user level changes
-  const levelChangeLogs = logs.filter(log => log.action_type === 'user_level_change');
+  const levelChangeLogs = logs.filter(log => log.action === 'user_level_change');
 
   if (isLoading) {
     return (
@@ -61,8 +61,10 @@ export const UserLevelHistory: React.FC = () => {
           <ScrollArea className="h-[400px]">
             <div className="space-y-3">
               {levelChangeLogs.map((log) => {
-                const newLevel = log.new_value?.user_level || 'unknown';
-                const oldLevel = log.metadata?.old_level || 'N/A';
+                const newData = log.new_data as Record<string, unknown> | null;
+                const newLevel = (newData?.user_level as string) || 'unknown';
+                const oldData = log.old_data as Record<string, unknown> | null;
+                const oldLevel = (oldData?.user_level as string) || 'N/A';
                 
                 return (
                   <div
@@ -92,11 +94,6 @@ export const UserLevelHistory: React.FC = () => {
                           {newLevel}
                         </Badge>
                       </div>
-                      {log.reason && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {log.reason}
-                        </p>
-                      )}
                       <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
                         <Calendar className="w-3 h-3" />
                         {format(new Date(log.created_at), 'MMM d, yyyy h:mm a')}

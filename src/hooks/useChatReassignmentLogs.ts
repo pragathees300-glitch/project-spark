@@ -3,22 +3,16 @@ import { supabase } from '@/integrations/supabase/client';
 
 export interface ChatReassignmentLog {
   id: string;
-  chat_session_id: string;
-  user_id: string;
-  previous_agent_id: string | null;
-  new_agent_id: string | null;
-  trigger_reason: string;
-  metadata: Record<string, unknown>;
+  session_id: string | null;
+  from_agent_id: string | null;
+  to_agent_id: string | null;
+  reason: string | null;
   created_at: string;
-  user_profile?: {
+  from_agent_profile?: {
     name: string;
     email: string;
   };
-  previous_agent_profile?: {
-    name: string;
-    email: string;
-  };
-  new_agent_profile?: {
+  to_agent_profile?: {
     name: string;
     email: string;
   };
@@ -37,30 +31,33 @@ export const useChatReassignmentLogs = (limit = 50) => {
 
       if (logsError) throw logsError;
 
-      // Get unique user IDs for profile lookup
-      const userIds = new Set<string>();
+      // Get unique agent IDs for profile lookup
+      const agentIds = new Set<string>();
       logsData?.forEach(log => {
-        if (log.user_id) userIds.add(log.user_id);
-        if (log.previous_agent_id) userIds.add(log.previous_agent_id);
-        if (log.new_agent_id) userIds.add(log.new_agent_id);
+        if (log.from_agent_id) agentIds.add(log.from_agent_id);
+        if (log.to_agent_id) agentIds.add(log.to_agent_id);
       });
 
       // Fetch profiles
       const { data: profiles } = await supabase
         .from('profiles')
         .select('user_id, name, email')
-        .in('user_id', Array.from(userIds));
+        .in('user_id', Array.from(agentIds));
 
       const profileMap = new Map(
-        profiles?.map(p => [p.user_id, { name: p.name, email: p.email }])
+        profiles?.map(p => [p.user_id, { name: p.name || '', email: p.email || '' }])
       );
 
       // Map logs with profile data
       return logsData?.map(log => ({
-        ...log,
-        user_profile: profileMap.get(log.user_id),
-        previous_agent_profile: log.previous_agent_id ? profileMap.get(log.previous_agent_id) : undefined,
-        new_agent_profile: log.new_agent_id ? profileMap.get(log.new_agent_id) : undefined,
+        id: log.id,
+        session_id: log.session_id,
+        from_agent_id: log.from_agent_id,
+        to_agent_id: log.to_agent_id,
+        reason: log.reason,
+        created_at: log.created_at,
+        from_agent_profile: log.from_agent_id ? profileMap.get(log.from_agent_id) : undefined,
+        to_agent_profile: log.to_agent_id ? profileMap.get(log.to_agent_id) : undefined,
       })) as ChatReassignmentLog[];
     },
   });

@@ -8,6 +8,16 @@ export const useAdminReassignChatName = () => {
 
   const reassignNameMutation = useMutation({
     mutationFn: async ({ userId, indianNameId }: { userId: string; indianNameId: string }) => {
+      // First get the name from indian_names_list
+      const { data: nameData, error: nameError } = await supabase
+        .from('indian_names_list')
+        .select('name')
+        .eq('id', indianNameId)
+        .single();
+
+      if (nameError) throw nameError;
+      const indianName = nameData?.name || '';
+
       // Check if user already has an assigned name
       const { data: existing } = await supabase
         .from('chat_customer_names')
@@ -19,7 +29,7 @@ export const useAdminReassignChatName = () => {
         // Update existing assignment
         const { error } = await supabase
           .from('chat_customer_names')
-          .update({ indian_name_id: indianNameId, assigned_at: new Date().toISOString() })
+          .update({ indian_name_id: indianNameId, indian_name: indianName })
           .eq('user_id', userId);
 
         if (error) throw error;
@@ -27,7 +37,7 @@ export const useAdminReassignChatName = () => {
         // Create new assignment
         const { error } = await supabase
           .from('chat_customer_names')
-          .insert({ user_id: userId, indian_name_id: indianNameId });
+          .insert({ user_id: userId, indian_name_id: indianNameId, indian_name: indianName });
 
         if (error) throw error;
       }
@@ -53,6 +63,16 @@ export const useAdminReassignChatName = () => {
   // Bulk assign names to multiple users
   const bulkAssignNamesMutation = useMutation({
     mutationFn: async ({ userIds, indianNameId }: { userIds: string[]; indianNameId: string }) => {
+      // First get the name from indian_names_list
+      const { data: nameData, error: nameError } = await supabase
+        .from('indian_names_list')
+        .select('name')
+        .eq('id', indianNameId)
+        .single();
+
+      if (nameError) throw nameError;
+      const indianName = nameData?.name || '';
+
       // Get existing assignments
       const { data: existingAssignments } = await supabase
         .from('chat_customer_names')
@@ -69,7 +89,7 @@ export const useAdminReassignChatName = () => {
       if (usersToUpdate.length > 0) {
         const { error: updateError } = await supabase
           .from('chat_customer_names')
-          .update({ indian_name_id: indianNameId, assigned_at: new Date().toISOString() })
+          .update({ indian_name_id: indianNameId, indian_name: indianName })
           .in('user_id', usersToUpdate);
 
         if (updateError) throw updateError;
@@ -79,7 +99,11 @@ export const useAdminReassignChatName = () => {
       if (usersToInsert.length > 0) {
         const { error: insertError } = await supabase
           .from('chat_customer_names')
-          .insert(usersToInsert.map(userId => ({ user_id: userId, indian_name_id: indianNameId })));
+          .insert(usersToInsert.map(userId => ({ 
+            user_id: userId, 
+            indian_name_id: indianNameId, 
+            indian_name: indianName 
+          })));
 
         if (insertError) throw insertError;
       }

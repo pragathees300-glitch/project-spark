@@ -77,12 +77,10 @@ export const useAdminKYC = () => {
 
       // Log the action
       await supabase.rpc('create_audit_log', {
-        _action_type: `kyc_${status}`,
-        _entity_type: 'kyc_submission',
-        _entity_id: kycId,
-        _user_id: data.user_id,
-        _admin_id: user.id,
-        _new_value: { status, reason },
+        p_action: `kyc_${status}`,
+        p_entity_type: 'kyc_submission',
+        p_entity_id: kycId,
+        p_new_data: { status, reason },
       });
 
       return data;
@@ -123,12 +121,10 @@ export const useAdminKYC = () => {
 
       // Log the action
       await supabase.rpc('create_audit_log', {
-        _action_type: 'kyc_approved',
-        _entity_type: 'kyc_submission',
-        _entity_id: kycId,
-        _user_id: data.user_id,
-        _admin_id: user.id,
-        _new_value: { status: 'approved' },
+        p_action: 'kyc_approved',
+        p_entity_type: 'kyc_submission',
+        p_entity_id: kycId,
+        p_new_data: { status: 'approved' },
       });
 
       return data;
@@ -169,12 +165,10 @@ export const useAdminKYC = () => {
 
       // Log the action
       await supabase.rpc('create_audit_log', {
-        _action_type: 'kyc_rejected',
-        _entity_type: 'kyc_submission',
-        _entity_id: kycId,
-        _user_id: data.user_id,
-        _admin_id: user.id,
-        _new_value: { status: 'rejected', reason },
+        p_action: 'kyc_rejected',
+        p_entity_type: 'kyc_submission',
+        p_entity_id: kycId,
+        p_new_data: { status: 'rejected', reason },
       });
 
       return data;
@@ -216,12 +210,10 @@ export const useAdminKYC = () => {
       // Log the action
       if (kycData) {
         await supabase.rpc('create_audit_log', {
-          _action_type: 'kyc_deleted',
-          _entity_type: 'kyc_submission',
-          _entity_id: kycId,
-          _user_id: kycData.user_id,
-          _admin_id: user.id,
-          _new_value: { status: 'deleted' },
+          p_action: 'kyc_deleted',
+          p_entity_type: 'kyc_submission',
+          p_entity_id: kycId,
+          p_new_data: { status: 'deleted' },
         });
       }
 

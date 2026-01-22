@@ -48,13 +48,10 @@ export const useAdminChat = () => {
 
       if (profilesError) throw profilesError;
 
-      // Fetch chat customer names with Indian names
+      // Fetch chat customer names - just get the indian_name field directly
       const { data: customerNames, error: customerNamesError } = await supabase
         .from('chat_customer_names')
-        .select(`
-          user_id,
-          indian_name:indian_names(name)
-        `)
+        .select('user_id, indian_name')
         .in('user_id', userIds);
 
       if (customerNamesError) throw customerNamesError;
@@ -85,7 +82,7 @@ export const useAdminChat = () => {
 
       const profilesMap = new Map(profiles?.map((p) => [p.user_id, p]) || []);
       const indianNamesMap = new Map(
-        customerNames?.map((c) => [c.user_id, (c.indian_name as { name: string } | null)?.name]) || []
+        customerNames?.map((c) => [c.user_id, c.indian_name]) || []
       );
       const sessionsMap = new Map(
         sessions?.map((s) => [s.user_id, { 

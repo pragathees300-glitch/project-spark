@@ -47,9 +47,7 @@ export const useAssignedAgent = () => {
       // Check for chat customer name (admin's pseudonym display)
       const { data: customerName } = await supabase
         .from('chat_customer_names')
-        .select(`
-          indian_name:indian_names(name)
-        `)
+        .select('indian_name')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -69,12 +67,11 @@ export const useAssignedAgent = () => {
 
       // If there's an Indian name assigned, use it as display name
       if (customerName?.indian_name) {
-        const indianName = customerName.indian_name as { name: string };
-        console.log('[useAssignedAgent] Using Indian name as agent:', indianName.name);
+        console.log('[useAssignedAgent] Using Indian name as agent:', customerName.indian_name);
         
         return {
           id: session.assigned_agent_id,
-          name: indianName.name,
+          name: customerName.indian_name,
           isOnline: !!isOnline,
           lastSeenAt: presence?.last_seen_at || null,
           isChatClosed,

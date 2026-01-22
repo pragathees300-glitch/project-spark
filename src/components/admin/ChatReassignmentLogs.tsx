@@ -3,10 +3,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { useChatReassignmentLogs } from '@/hooks/useChatReassignmentLogs';
 import { format } from 'date-fns';
-import { FileText, ArrowRight, User, Bot } from 'lucide-react';
+import { FileText, ArrowRight, Bot } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const getTriggerBadgeVariant = (reason: string) => {
+const getTriggerBadgeVariant = (reason: string | null) => {
   switch (reason) {
     case 'user_left':
     case 'page_close':
@@ -27,7 +27,8 @@ const getTriggerBadgeVariant = (reason: string) => {
   }
 };
 
-const formatTriggerReason = (reason: string) => {
+const formatTriggerReason = (reason: string | null) => {
+  if (!reason) return 'Unknown';
   return reason
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (l) => l.toUpperCase());
@@ -79,9 +80,9 @@ export const ChatReassignmentLogs = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Time</TableHead>
-                  <TableHead>User</TableHead>
+                  <TableHead>Session</TableHead>
                   <TableHead>Agent Change</TableHead>
-                  <TableHead>Trigger</TableHead>
+                  <TableHead>Reason</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -91,30 +92,27 @@ export const ChatReassignmentLogs = () => {
                       {format(new Date(log.created_at), 'MMM d, HH:mm:ss')}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">
-                          {log.user_profile?.name || 'Unknown User'}
-                        </span>
-                      </div>
+                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                        {log.session_id?.slice(0, 8) || 'N/A'}...
+                      </code>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1">
                           <Bot className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">
-                            {log.previous_agent_profile?.name || 'None'}
+                            {log.from_agent_profile?.name || 'None'}
                           </span>
                         </div>
                         <ArrowRight className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm font-medium">
-                          {log.new_agent_profile?.name || 'Unassigned'}
+                          {log.to_agent_profile?.name || 'Unassigned'}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getTriggerBadgeVariant(log.trigger_reason)}>
-                        {formatTriggerReason(log.trigger_reason)}
+                      <Badge variant={getTriggerBadgeVariant(log.reason)}>
+                        {formatTriggerReason(log.reason)}
                       </Badge>
                     </TableCell>
                   </TableRow>

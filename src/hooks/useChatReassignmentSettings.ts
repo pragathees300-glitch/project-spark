@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { Json } from '@/integrations/supabase/types';
 
 export interface ChatReassignmentSettings {
   chat_auto_reassignment_enabled: boolean;
@@ -68,7 +69,13 @@ export const useChatReassignmentSettings = () => {
 
       const settingsMap: Record<string, string> = {};
       data?.forEach(item => {
-        settingsMap[item.key] = item.value;
+        // Handle Json value - convert to string
+        const value = item.value;
+        if (typeof value === 'string') {
+          settingsMap[item.key] = value;
+        } else if (value !== null && value !== undefined) {
+          settingsMap[item.key] = String(value);
+        }
       });
 
       // Parse values with proper types
@@ -99,7 +106,7 @@ export const useChatReassignmentSettings = () => {
   });
 
   const updateSettingMutation = useMutation({
-    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+    mutationFn: async ({ key, value }: { key: string; value: Json }) => {
       const { error } = await supabase
         .from('platform_settings')
         .upsert({

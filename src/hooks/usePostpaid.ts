@@ -22,7 +22,7 @@ export interface PostpaidProfile {
   postpaid_enabled: boolean;
   postpaid_credit_limit: number;
   postpaid_used: number;
-  postpaid_due_cycle: number | null;
+  postpaid_due_cycle: string | null;
 }
 
 export interface PostpaidStatus {
@@ -31,7 +31,7 @@ export interface PostpaidStatus {
   usedCredit: number;
   availableCredit: number;
   outstandingDues: number;
-  dueCycle: number | null;
+  dueCycle: string | null;
   canRequestPayout: boolean;
 }
 

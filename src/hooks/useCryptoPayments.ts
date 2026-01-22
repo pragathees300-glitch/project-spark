@@ -6,25 +6,19 @@ import { useToast } from '@/hooks/use-toast';
 export interface CryptoPayment {
   id: string;
   user_id: string;
-  order_id: string | null;
-  wallet_name: string;
-  wallet_address: string;
+  wallet_id: string | null;
   amount: number;
-  currency_symbol: string;
   transaction_hash: string | null;
-  status: 'pending' | 'verified' | 'rejected';
-  admin_notes: string | null;
-  verified_by: string | null;
-  verified_at: string | null;
-  payment_purpose: 'order' | 'postpaid';
-  payment_proof_url: string | null;
+  status: string;
+  proof_url: string | null;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
   created_at: string;
-  updated_at: string;
   // Joined fields
   user_email?: string;
   user_name?: string;
   order_number?: string;
-  order_total?: number; // For payment matching
+  order_total?: number;
 }
 
 export function useCryptoPayments() {
@@ -54,26 +48,12 @@ export function useCryptoPayments() {
           .select('user_id, email, name')
           .in('user_id', userIds);
 
-        const orderIds = data.filter(p => p.order_id).map(p => p.order_id);
-        let orders: any[] = [];
-        if (orderIds.length > 0) {
-          const { data: orderData } = await supabase
-            .from('orders')
-            .select('id, order_number, selling_price, quantity')
-            .in('id', orderIds);
-          orders = orderData || [];
-        }
-
         return data.map(payment => {
           const profile = profiles?.find(p => p.user_id === payment.user_id);
-          const order = orders.find(o => o.id === payment.order_id);
-          const orderTotal = order ? (order.selling_price * order.quantity) : null;
           return {
             ...payment,
-            user_email: profile?.email,
-            user_name: profile?.name,
-            order_number: order?.order_number,
-            order_total: orderTotal,
+            user_email: profile?.email || '',
+            user_name: profile?.name || '',
           };
         }) as CryptoPayment[];
       }
@@ -86,27 +66,19 @@ export function useCryptoPayments() {
   // Create a new crypto payment
   const createPaymentMutation = useMutation({
     mutationFn: async (payment: {
-      wallet_name: string;
-      wallet_address: string;
+      wallet_id?: string;
       amount: number;
-      currency_symbol: string;
       transaction_hash?: string;
-      order_id?: string;
-      payment_purpose?: 'order' | 'postpaid';
-      payment_proof_url?: string;
+      proof_url?: string;
     }) => {
       const { data, error } = await supabase
         .from('crypto_payments')
         .insert({
           user_id: user!.id,
-          wallet_name: payment.wallet_name,
-          wallet_address: payment.wallet_address,
+          wallet_id: payment.wallet_id,
           amount: payment.amount,
-          currency_symbol: payment.currency_symbol,
           transaction_hash: payment.transaction_hash,
-          order_id: payment.order_id,
-          payment_purpose: payment.payment_purpose || 'order',
-          payment_proof_url: payment.payment_proof_url,
+          proof_url: payment.proof_url,
         })
         .select()
         .single();
@@ -114,16 +86,14 @@ export function useCryptoPayments() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['crypto-payments'] });
       toast({
         title: 'Payment Submitted',
-        description: variables.payment_purpose === 'postpaid' 
-          ? 'Your postpaid dues payment has been submitted for verification.'
-          : 'Your payment has been submitted for verification.',
+        description: 'Your payment has been submitted for verification.',
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: 'Error',
         description: error.message || 'Failed to submit payment.',
@@ -152,7 +122,7 @@ export function useCryptoPayments() {
         description: 'Your transaction hash has been saved.',
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: 'Error',
         description: error.message || 'Failed to update transaction hash.',
@@ -169,19 +139,8 @@ export function useCryptoPayments() {
       adminNotes,
     }: { 
       paymentId: string; 
-      status: 'verified' | 'rejected'; 
+      status: 'confirmed' | 'rejected'; 
       adminNotes?: string;
-      // paymentDetails is now handled server-side
-      paymentDetails?: {
-        userName: string;
-        userEmail: string;
-        userId: string;
-        amount: number;
-        currencySymbol: string;
-        walletName: string;
-        transactionHash?: string;
-        paymentPurpose?: 'order' | 'postpaid';
-      };
     }) => {
       // Use Edge Function for wallet/postpaid operations (bypasses RLS for self-hosted)
       const { data, error } = await supabase.functions.invoke('verify-crypto-payment', {
@@ -221,8 +180,8 @@ export function useCryptoPayments() {
       const isPostpaid = data.postpaidCleared;
       const isWalletCredited = data.walletCredited;
       toast({
-        title: data.status === 'verified' ? 'Payment Verified' : 'Payment Rejected',
-        description: data.status === 'verified' 
+        title: data.status === 'confirmed' ? 'Payment Verified' : 'Payment Rejected',
+        description: data.status === 'confirmed' 
           ? isPostpaid
             ? 'Payment verified and postpaid dues have been auto-cleared.'
             : isWalletCredited
@@ -231,7 +190,7 @@ export function useCryptoPayments() {
           : 'The payment has been rejected. User has been notified.',
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: 'Error',
         description: error.message || 'Failed to update payment status.',
@@ -243,7 +202,7 @@ export function useCryptoPayments() {
   // Get counts by status
   const paymentCounts = {
     pending: paymentsQuery.data?.filter(p => p.status === 'pending').length || 0,
-    verified: paymentsQuery.data?.filter(p => p.status === 'verified').length || 0,
+    confirmed: paymentsQuery.data?.filter(p => p.status === 'confirmed').length || 0,
     rejected: paymentsQuery.data?.filter(p => p.status === 'rejected').length || 0,
   };
 

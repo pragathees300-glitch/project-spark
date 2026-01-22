@@ -23,8 +23,9 @@ export const useAgentViewingPresence = (viewingUserId: string | undefined) => {
         .upsert(
           {
             agent_id: user.id,
-            viewing_user_id: userId,
+            user_id: userId,
             last_seen_at: new Date().toISOString(),
+            is_viewing: true,
           },
           {
             onConflict: 'agent_id',
@@ -119,7 +120,7 @@ export const useIsAgentViewingChat = () => {
       const { data, error } = await supabase
         .from('agent_chat_presence')
         .select('agent_id, last_seen_at')
-        .eq('viewing_user_id', user.id)
+        .eq('user_id', user.id)
         .gte('last_seen_at', fifteenSecondsAgo)
         .maybeSingle();
 
@@ -149,7 +150,7 @@ export const useIsAgentViewingChat = () => {
           event: '*',
           schema: 'public',
           table: 'agent_chat_presence',
-          filter: `viewing_user_id=eq.${user.id}`,
+          filter: `user_id=eq.${user.id}`,
         },
         () => {
           queryClient.invalidateQueries({ queryKey: ['agent-viewing-presence', user.id] });

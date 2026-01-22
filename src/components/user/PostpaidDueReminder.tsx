@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Clock, AlertTriangle, CreditCard, X } from 'lucide-react';
 import { usePostpaid } from '@/hooks/usePostpaid';
 import { usePlatformSettings, CURRENCY_SYMBOLS } from '@/hooks/usePlatformSettings';
-import { differenceInDays, addDays, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 interface PostpaidDueReminderProps {
@@ -25,9 +24,12 @@ export const PostpaidDueReminder: React.FC<PostpaidDueReminderProps> = ({ onOpen
 
   const { outstandingDues, dueCycle } = postpaidStatus;
 
+  // Parse dueCycle as number for calculations
+  const dueCycleNum = dueCycle ? parseInt(dueCycle, 10) : null;
+  
   // Calculate urgency based on a hypothetical due date
   // In a real implementation, you'd track the actual transaction dates
-  const daysUntilDue = dueCycle ? Math.max(0, dueCycle - 7) : null; // Simulate days remaining
+  const daysUntilDue = dueCycleNum ? Math.max(0, dueCycleNum - 7) : null; // Simulate days remaining
   const isUrgent = daysUntilDue !== null && daysUntilDue <= 3;
   const isWarning = daysUntilDue !== null && daysUntilDue <= 7 && daysUntilDue > 3;
 

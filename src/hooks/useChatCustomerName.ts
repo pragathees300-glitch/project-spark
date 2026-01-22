@@ -5,12 +5,9 @@ import { useAuth } from '@/contexts/AuthContext';
 export interface ChatCustomerName {
   id: string;
   user_id: string;
-  indian_name_id: string;
-  assigned_at: string;
-  indian_name?: {
-    id: string;
-    name: string;
-  };
+  indian_name_id: string | null;
+  indian_name: string;
+  created_at: string;
 }
 
 export const useChatCustomerName = () => {
@@ -25,10 +22,7 @@ export const useChatCustomerName = () => {
 
       const { data, error } = await supabase
         .from('chat_customer_names')
-        .select(`
-          *,
-          indian_name:indian_names(id, name)
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -52,10 +46,10 @@ export const useChatCustomerName = () => {
 
       if (existing) return existing;
 
-      // Get a random active Indian name
+      // Get a random active Indian name from the list
       const { data: names, error: namesError } = await supabase
-        .from('indian_names')
-        .select('id')
+        .from('indian_names_list')
+        .select('id, name')
         .eq('is_active', true);
 
       if (namesError) throw namesError;
@@ -68,6 +62,7 @@ export const useChatCustomerName = () => {
         .insert({
           user_id: user.id,
           indian_name_id: randomName.id,
+          indian_name: randomName.name,
         })
         .select()
         .single();
@@ -81,7 +76,7 @@ export const useChatCustomerName = () => {
   });
 
   return {
-    customerName: chatCustomerName?.indian_name?.name || null,
+    customerName: chatCustomerName?.indian_name || null,
     isLoading,
     assignCustomerName: assignCustomerNameMutation.mutate,
     isAssigning: assignCustomerNameMutation.isPending,

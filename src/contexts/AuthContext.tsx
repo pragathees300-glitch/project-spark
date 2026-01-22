@@ -77,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Error fetching role:', roleError);
       }
 
-      const role: UserRole = roleData?.role || 'user';
+      const role: UserRole = (roleData?.role as UserRole) || 'user';
 
       return {
         id: userId,

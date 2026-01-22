@@ -93,7 +93,7 @@ export const useAdminOrders = () => {
           quantity: order.quantity,
           selling_price: Number(order.selling_price),
           base_price: Number(order.base_price),
-          status: order.status,
+          status: order.status as 'pending_payment' | 'paid_by_user' | 'processing' | 'completed' | 'cancelled' | 'postpaid_pending',
           created_at: order.created_at,
           paid_at: order.paid_at,
           completed_at: order.completed_at,

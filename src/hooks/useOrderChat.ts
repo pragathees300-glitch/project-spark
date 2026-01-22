@@ -8,23 +8,16 @@ import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 export interface OrderChatMessage {
   id: string;
   order_id: string;
+  sender_id: string;
+  sender_role: string;
+  message: string;
+  attachment_url: string | null;
+  is_read: boolean;
+  created_at: string;
+  // Aliased properties for component compatibility
   sender_type: 'user' | 'customer' | 'system';
   sender_user_id: string | null;
   admin_id: string | null;
-  message: string;
-  is_read: boolean;
-  created_at: string;
-}
-
-export interface OrderCustomerName {
-  id: string;
-  order_id: string;
-  indian_name_id: string;
-  assigned_at: string;
-  indian_name?: {
-    id: string;
-    name: string;
-  };
 }
 
 export const useOrderChat = (orderId: string | null) => {
@@ -46,7 +39,14 @@ export const useOrderChat = (orderId: string | null) => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return data as OrderChatMessage[];
+      
+      // Map database fields to expected interface
+      return (data || []).map(msg => ({
+        ...msg,
+        sender_type: msg.sender_role === 'admin' ? 'customer' : 'user',
+        sender_user_id: msg.sender_id,
+        admin_id: msg.sender_role === 'admin' ? msg.sender_id : null,
+      })) as OrderChatMessage[];
     },
     enabled: !!orderId && !!user?.id,
   });
@@ -57,61 +57,25 @@ export const useOrderChat = (orderId: string | null) => {
     queryFn: async () => {
       if (!orderId) return null;
 
-      const { data, error } = await supabase
-        .from('order_customer_names')
-        .select(`
-          *,
-          indian_name:indian_names(id, name)
-        `)
-        .eq('order_id', orderId)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data as OrderCustomerName | null;
-    },
-    enabled: !!orderId && !!user?.id,
-  });
-
-  // Assign a random customer name if not already assigned
-  const assignCustomerNameMutation = useMutation({
-    mutationFn: async () => {
-      if (!orderId) throw new Error('No order ID');
-
-      // Check if already assigned
-      const { data: existing } = await supabase
-        .from('order_customer_names')
-        .select('id')
-        .eq('order_id', orderId)
-        .maybeSingle();
-
-      if (existing) return existing;
-
-      // Get a random active Indian name
-      const { data: names, error: namesError } = await supabase
-        .from('indian_names')
-        .select('id')
-        .eq('is_active', true);
-
-      if (namesError) throw namesError;
-      if (!names || names.length === 0) throw new Error('No Indian names available');
-
-      const randomName = names[Math.floor(Math.random() * names.length)];
-
-      const { data, error } = await supabase
-        .from('order_customer_names')
-        .insert({
-          order_id: orderId,
-          indian_name_id: randomName.id,
-        })
-        .select()
+      // Get from chat_customer_names using order info
+      const { data: order } = await supabase
+        .from('orders')
+        .select('dropshipper_user_id')
+        .eq('id', orderId)
         .single();
 
+      if (!order) return null;
+
+      const { data, error } = await supabase
+        .from('chat_customer_names')
+        .select('indian_name')
+        .eq('user_id', order.dropshipper_user_id)
+        .maybeSingle();
+
       if (error) throw error;
-      return data;
+      return data?.indian_name || null;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['order-customer-name', orderId] });
-    },
+    enabled: !!orderId && !!user?.id,
   });
 
   // Send message as user
@@ -123,8 +87,8 @@ export const useOrderChat = (orderId: string | null) => {
         .from('order_chat_messages')
         .insert({
           order_id: orderId,
-          sender_type: 'user',
-          sender_user_id: user.id,
+          sender_id: user.id,
+          sender_role: 'user',
           message,
         })
         .select()
@@ -140,15 +104,19 @@ export const useOrderChat = (orderId: string | null) => {
 
       // Send email notification to admin
       if (orderRes.data && profileRes.data) {
-        await supabase.functions.invoke('send-notification-email', {
-          body: {
-            type: 'order_chat_to_admin',
-            orderNumber: orderRes.data.order_number,
-            userName: profileRes.data.name,
-            userEmail: profileRes.data.email,
-            message: message.substring(0, 500),
-          },
-        });
+        try {
+          await supabase.functions.invoke('send-notification-email', {
+            body: {
+              type: 'order_chat_to_admin',
+              orderNumber: orderRes.data.order_number,
+              userName: profileRes.data.name,
+              userEmail: profileRes.data.email,
+              message: message.substring(0, 500),
+            },
+          });
+        } catch (e) {
+          console.error('Email notification failed:', e);
+        }
       }
 
       return data;
@@ -174,7 +142,7 @@ export const useOrderChat = (orderId: string | null) => {
         .from('order_chat_messages')
         .update({ is_read: true })
         .eq('order_id', orderId)
-        .eq('sender_type', 'customer')
+        .eq('sender_role', 'admin')
         .eq('is_read', false);
 
       if (error) throw error;
@@ -201,12 +169,12 @@ export const useOrderChat = (orderId: string | null) => {
         (payload) => {
           queryClient.invalidateQueries({ queryKey: ['order-chat-messages', orderId] });
           
-          const newMessage = payload.new as OrderChatMessage;
-          if (newMessage.sender_type === 'customer') {
+          const newMessage = payload.new as any;
+          if (newMessage.sender_role === 'admin') {
             // Play sound if enabled
             if (settingsMap.notification_sound_enabled) {
               const notificationSound = new Audio('/notification.mp3');
-              notificationSound.volume = settingsMap.notification_sound_volume / 100;
+              notificationSound.volume = (settingsMap.notification_sound_volume || 50) / 100;
               notificationSound.play().catch(() => {});
             }
             
@@ -228,19 +196,19 @@ export const useOrderChat = (orderId: string | null) => {
   }, [orderId, user?.id, queryClient, settingsMap.notification_sound_enabled, settingsMap.notification_sound_volume]);
 
   const unreadCount = messages.filter(
-    (m) => m.sender_type === 'customer' && !m.is_read
+    (m) => m.sender_role === 'admin' && !m.is_read
   ).length;
 
   return {
     messages,
     isLoadingMessages,
-    customerName: customerName?.indian_name?.name || 'Customer',
+    customerName: customerName || 'Customer',
     isLoadingCustomerName,
     unreadCount,
     sendMessage: sendMessageMutation.mutate,
     isSending: sendMessageMutation.isPending,
     markAsRead: markAsReadMutation.mutate,
-    assignCustomerName: assignCustomerNameMutation.mutate,
+    assignCustomerName: () => {}, // No-op for compatibility
   };
 };
 
@@ -264,7 +232,14 @@ export const useAdminOrderChat = (orderId: string | null) => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return data as OrderChatMessage[];
+      
+      // Map database fields to expected interface
+      return (data || []).map(msg => ({
+        ...msg,
+        sender_type: msg.sender_role === 'admin' ? 'customer' : 'user',
+        sender_user_id: msg.sender_id,
+        admin_id: msg.sender_role === 'admin' ? msg.sender_id : null,
+      })) as OrderChatMessage[];
     },
     enabled: !!orderId && !!user?.id,
   });
@@ -275,22 +250,28 @@ export const useAdminOrderChat = (orderId: string | null) => {
     queryFn: async () => {
       if (!orderId) return null;
 
+      // Get from chat_customer_names using order info
+      const { data: order } = await supabase
+        .from('orders')
+        .select('dropshipper_user_id')
+        .eq('id', orderId)
+        .single();
+
+      if (!order) return null;
+
       const { data, error } = await supabase
-        .from('order_customer_names')
-        .select(`
-          *,
-          indian_name:indian_names(id, name)
-        `)
-        .eq('order_id', orderId)
+        .from('chat_customer_names')
+        .select('indian_name')
+        .eq('user_id', order.dropshipper_user_id)
         .maybeSingle();
 
       if (error) throw error;
-      return data as OrderCustomerName | null;
+      return data?.indian_name || null;
     },
     enabled: !!orderId && !!user?.id,
   });
 
-  // Fetch dropshipper user info including mobile from KYC
+  // Fetch dropshipper user info
   const { data: dropshipperInfo } = useQuery({
     queryKey: ['order-dropshipper-info', orderId],
     queryFn: async () => {
@@ -299,32 +280,24 @@ export const useAdminOrderChat = (orderId: string | null) => {
       // Get order to find dropshipper_user_id
       const { data: order, error: orderError } = await supabase
         .from('orders')
-        .select('dropshipper_user_id' as any)
+        .select('dropshipper_user_id')
         .eq('id', orderId)
         .single();
 
       if (orderError || !order) return null;
 
-      // Get profile and KYC info
-      const orderAny = order as any;
-      const [profileRes, kycRes] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('name, email')
-          .eq('user_id', orderAny.dropshipper_user_id)
-          .single(),
-        supabase
-          .from('kyc_submissions')
-          .select('mobile_number, first_name, last_name')
-          .eq('user_id', orderAny.dropshipper_user_id)
-          .maybeSingle(),
-      ]);
+      // Get profile info
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('name, email, phone')
+        .eq('user_id', order.dropshipper_user_id)
+        .single();
 
       return {
-        name: profileRes.data?.name || 'Unknown',
-        email: profileRes.data?.email || '',
-        mobileNumber: kycRes.data?.mobile_number || null,
-        kycName: kycRes.data ? `${kycRes.data.first_name} ${kycRes.data.last_name}` : null,
+        name: profileData?.name || 'Unknown',
+        email: profileData?.email || '',
+        mobileNumber: profileData?.phone || null,
+        kycName: null,
       };
     },
     enabled: !!orderId && !!user?.id,
@@ -340,8 +313,8 @@ export const useAdminOrderChat = (orderId: string | null) => {
         .from('order_chat_messages')
         .insert({
           order_id: orderId,
-          sender_type: 'customer',
-          admin_id: user.id,
+          sender_id: user.id,
+          sender_role: 'admin',
           message,
         })
         .select()
@@ -349,41 +322,35 @@ export const useAdminOrderChat = (orderId: string | null) => {
 
       if (error) throw error;
 
-      // Log the action for audit
-      await supabase.from('order_chat_audit_logs').insert({
-        order_id: orderId,
-        admin_id: user.id,
-        action: 'sent_as_customer',
-        message_id: data.id,
-        metadata: { message_preview: message.substring(0, 100) },
-      });
-
       // Get order and dropshipper info for email notification
       const { data: orderData } = await supabase
         .from('orders')
-        .select('order_number, dropshipper_user_id' as any)
+        .select('order_number, dropshipper_user_id')
         .eq('id', orderId)
         .single();
 
       if (orderData) {
-        const orderDataAny = orderData as any;
         const { data: dropshipperProfile } = await supabase
           .from('profiles')
           .select('name, email')
-          .eq('user_id', orderDataAny.dropshipper_user_id)
+          .eq('user_id', orderData.dropshipper_user_id)
           .single();
 
         // Send email notification to dropshipper
         if (dropshipperProfile) {
-          await supabase.functions.invoke('send-notification-email', {
-            body: {
-              type: 'order_chat_to_user',
-              orderNumber: orderDataAny.order_number,
-              userName: dropshipperProfile.name,
-              recipientEmail: dropshipperProfile.email,
-              message: message.substring(0, 500),
-            },
-          });
+          try {
+            await supabase.functions.invoke('send-notification-email', {
+              body: {
+                type: 'order_chat_to_user',
+                orderNumber: orderData.order_number,
+                userName: dropshipperProfile.name,
+                recipientEmail: dropshipperProfile.email,
+                message: message.substring(0, 500),
+              },
+            });
+          } catch (e) {
+            console.error('Email notification failed:', e);
+          }
         }
       }
 
@@ -418,12 +385,12 @@ export const useAdminOrderChat = (orderId: string | null) => {
         (payload) => {
           queryClient.invalidateQueries({ queryKey: ['order-chat-messages', orderId] });
           
-          const newMessage = payload.new as OrderChatMessage;
-          if (newMessage.sender_type === 'user') {
+          const newMessage = payload.new as any;
+          if (newMessage.sender_role === 'user') {
             // Play sound if enabled
             if (settingsMap.notification_sound_enabled) {
               const notificationSound = new Audio('/notification.mp3');
-              notificationSound.volume = settingsMap.notification_sound_volume / 100;
+              notificationSound.volume = (settingsMap.notification_sound_volume || 50) / 100;
               notificationSound.play().catch(() => {});
             }
           }
@@ -439,7 +406,7 @@ export const useAdminOrderChat = (orderId: string | null) => {
   return {
     messages,
     isLoadingMessages,
-    customerName: customerName?.indian_name?.name || 'Customer',
+    customerName: customerName || 'Customer',
     dropshipperInfo,
     sendAsCustomer: sendAsCustomerMutation.mutate,
     isSending: sendAsCustomerMutation.isPending,

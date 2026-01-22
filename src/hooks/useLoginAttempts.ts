@@ -6,6 +6,11 @@ interface LoginAttempt {
   id: string;
   email: string;
   ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+  success: boolean;
+  failure_reason: string | null;
+  // Aliased properties for component compatibility
   attempted_at: string;
   was_successful: boolean;
 }
@@ -39,11 +44,17 @@ export const useLoginAttempts = () => {
       const { data, error } = await supabase
         .from('login_attempts')
         .select('*')
-        .order('attempted_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(100);
 
       if (error) throw error;
-      return data as LoginAttempt[];
+      
+      // Map database fields to expected interface
+      return (data || []).map(item => ({
+        ...item,
+        attempted_at: item.created_at,
+        was_successful: item.success,
+      })) as LoginAttempt[];
     },
     enabled: isAdmin,
     refetchInterval: 30000, // Refresh every 30 seconds
@@ -152,7 +163,7 @@ export const useLoginAttempts = () => {
       await supabase
         .from('login_attempts')
         .delete()
-        .lt('attempted_at', cutoff);
+        .lt('created_at', cutoff);
     } catch (error) {
       console.error('Failed to cleanup login attempts:', error);
     }

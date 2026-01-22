@@ -5,31 +5,39 @@ import { toast } from 'sonner';
 
 export interface PopupMessage {
   id: string;
-  title: string | null;
-  message: string;
-  message_type: string;
-  target_type: string;
+  title: string;
+  content: string;
+  message: string | null;
+  message_type: string | null;
+  type: string | null;
+  target_type: string | null;
   target_roles: string[] | null;
-  is_enabled: boolean;
-  priority: number;
+  target_role: string | null;
+  target_user_ids: string[] | null;
+  is_enabled: boolean | null;
+  is_active: boolean | null;
+  is_blocking: boolean | null;
+  priority: number | null;
   starts_at: string | null;
   expires_at: string | null;
-  re_acknowledgment_mode: string;
+  re_acknowledgment_mode: string | null;
   re_ack_period_days: number | null;
-  version: number;
+  require_acknowledgment: boolean | null;
+  show_once_per_session: boolean | null;
+  version: number | null;
+  acknowledgment_count: number | null;
   created_by: string | null;
   created_at: string;
-  updated_at: string;
-  target_user_ids?: string[];
-  acknowledgment_count?: number;
+  updated_at: string | null;
 }
 
 export interface PopupAcknowledgment {
   id: string;
-  message_id: string;
+  popup_id: string;
   user_id: string;
-  message_version: number;
-  acknowledged_at: string;
+  session_id: string | null;
+  acknowledged_at: string | null;
+  created_at: string;
 }
 
 export function usePopupMessages() {
@@ -61,52 +69,42 @@ export function usePopupMessages() {
 
       if (messagesError) throw messagesError;
 
-      // Fetch targets for each message
-      const messagesWithTargets = await Promise.all(
-        (messagesData || []).map(async (msg) => {
-          const { data: targets } = await supabase
-            .from('popup_message_targets')
-            .select('user_id')
-            .eq('message_id', msg.id);
-
-          // Get acknowledgment count for admin view
-          const { count } = await supabase
-            .from('popup_acknowledgments')
-            .select('*', { count: 'exact', head: true })
-            .eq('message_id', msg.id);
-
-          return {
-            ...msg,
-            target_user_ids: targets?.map(t => t.user_id) || [],
-            acknowledgment_count: count || 0
-          };
-        })
-      );
-
       // For admins, return all messages
       if (isAdmin) {
-        return messagesWithTargets;
+        return (messagesData || []).map(msg => ({
+          ...msg,
+          is_enabled: msg.is_active ?? msg.is_enabled ?? true,
+          message_type: msg.type || msg.message_type || 'info',
+        })) as PopupMessage[];
       }
 
       // For users, filter based on targeting rules
       const now = new Date();
-      return messagesWithTargets.filter(msg => {
-        if (!msg.is_enabled) return false;
+      const filtered = (messagesData || []).filter(msg => {
+        if (!(msg.is_active ?? msg.is_enabled)) return false;
         
         // Check time constraints
         if (msg.starts_at && new Date(msg.starts_at) > now) return false;
         if (msg.expires_at && new Date(msg.expires_at) < now) return false;
 
         // Check targeting
-        if (msg.target_type === 'all') return true;
-        if (msg.target_type === 'specific_users') {
+        const targetType = msg.target_type || 'all';
+        if (targetType === 'all') return true;
+        if (targetType === 'specific_users') {
           return msg.target_user_ids?.includes(user.id);
         }
-        if (msg.target_type === 'by_role') {
-          return msg.target_roles?.includes(userRole);
+        if (targetType === 'by_role') {
+          const roles = msg.target_roles || (msg.target_role ? [msg.target_role] : []);
+          return roles.includes(userRole);
         }
         return false;
       });
+
+      return filtered.map(msg => ({
+        ...msg,
+        is_enabled: msg.is_active ?? msg.is_enabled ?? true,
+        message_type: msg.type || msg.message_type || 'info',
+      })) as PopupMessage[];
     },
     enabled: !!user?.id
   });
@@ -123,7 +121,7 @@ export function usePopupMessages() {
         .eq('user_id', user.id);
 
       if (error) throw error;
-      return data || [];
+      return (data || []) as PopupAcknowledgment[];
     },
     enabled: !!user?.id
   });
@@ -132,21 +130,23 @@ export function usePopupMessages() {
   const unacknowledgedMessages = messages.filter(msg => {
     if (isAdmin) return false; // Don't show popups to admins
     
-    const ack = acknowledgments.find(a => a.message_id === msg.id);
+    const ack = acknowledgments.find(a => a.popup_id === msg.id);
     
     if (!ack) return true; // Never acknowledged
     
     // Check re-acknowledgment mode
-    if (msg.re_acknowledgment_mode === 'once') {
+    const reAckMode = msg.re_acknowledgment_mode || 'once';
+    if (reAckMode === 'once') {
       return false; // Already acknowledged once
     }
     
-    if (msg.re_acknowledgment_mode === 'on_update') {
-      return ack.message_version < msg.version; // Show if version changed
+    if (reAckMode === 'on_update') {
+      // We don't have message_version in acknowledgments, so just check if ack exists
+      return false;
     }
     
-    if (msg.re_acknowledgment_mode === 'periodic' && msg.re_ack_period_days) {
-      const ackDate = new Date(ack.acknowledged_at);
+    if (reAckMode === 'periodic' && msg.re_ack_period_days) {
+      const ackDate = new Date(ack.acknowledged_at || ack.created_at);
       const periodMs = msg.re_ack_period_days * 24 * 60 * 60 * 1000;
       return new Date().getTime() - ackDate.getTime() > periodMs;
     }
@@ -159,18 +159,14 @@ export function usePopupMessages() {
     mutationFn: async (messageId: string) => {
       if (!user?.id) throw new Error('Not authenticated');
 
-      const message = messages.find(m => m.id === messageId);
-      if (!message) throw new Error('Message not found');
-
       const { error } = await supabase
         .from('popup_acknowledgments')
         .upsert({
-          message_id: messageId,
+          popup_id: messageId,
           user_id: user.id,
-          message_version: message.version,
           acknowledged_at: new Date().toISOString()
         }, {
-          onConflict: 'message_id,user_id'
+          onConflict: 'popup_id,user_id'
         });
 
       if (error) throw error;
@@ -194,38 +190,32 @@ export function usePopupMessages() {
       const { data: newMessage, error } = await supabase
         .from('popup_messages')
         .insert([{
-          title: messageData.title,
+          title: messageData.title || 'Announcement',
+          content: messageData.content || messageData.message || '',
           message: messageData.message,
+          type: messageData.message_type || messageData.type || 'info',
           message_type: messageData.message_type,
           target_type: messageData.target_type,
           target_roles: messageData.target_roles,
-          is_enabled: messageData.is_enabled,
-          priority: messageData.priority,
+          target_role: messageData.target_roles?.[0] || null,
+          target_user_ids: target_user_ids,
+          is_active: messageData.is_enabled ?? true,
+          is_enabled: messageData.is_enabled ?? true,
+          is_blocking: messageData.is_blocking ?? false,
+          priority: messageData.priority || 0,
           starts_at: messageData.starts_at,
           expires_at: messageData.expires_at,
-          re_acknowledgment_mode: messageData.re_acknowledgment_mode,
+          re_acknowledgment_mode: messageData.re_acknowledgment_mode || 'once',
           re_ack_period_days: messageData.re_ack_period_days,
-          version: messageData.version,
+          require_acknowledgment: messageData.require_acknowledgment ?? false,
+          show_once_per_session: messageData.show_once_per_session ?? false,
+          version: messageData.version || 1,
           created_by: user.id
         }])
         .select()
         .single();
 
       if (error) throw error;
-
-      // Add targets if specific users selected
-      if (data.target_type === 'specific_users' && target_user_ids?.length) {
-        const targets = target_user_ids.map(userId => ({
-          message_id: newMessage.id,
-          user_id: userId
-        }));
-
-        const { error: targetError } = await supabase
-          .from('popup_message_targets')
-          .insert(targets);
-
-        if (targetError) throw targetError;
-      }
 
       return newMessage;
     },
@@ -244,34 +234,43 @@ export function usePopupMessages() {
     mutationFn: async ({ id, ...data }: Partial<PopupMessage> & { id: string; target_user_ids?: string[] }) => {
       const { target_user_ids, ...messageData } = data;
 
+      const updateData: Record<string, unknown> = {
+        updated_at: new Date().toISOString()
+      };
+      
+      if (messageData.title !== undefined) updateData.title = messageData.title;
+      if (messageData.content !== undefined) updateData.content = messageData.content;
+      if (messageData.message !== undefined) updateData.message = messageData.message;
+      if (messageData.message_type !== undefined) {
+        updateData.type = messageData.message_type;
+        updateData.message_type = messageData.message_type;
+      }
+      if (messageData.target_type !== undefined) updateData.target_type = messageData.target_type;
+      if (messageData.target_roles !== undefined) {
+        updateData.target_roles = messageData.target_roles;
+        updateData.target_role = messageData.target_roles?.[0] || null;
+      }
+      if (target_user_ids !== undefined) updateData.target_user_ids = target_user_ids;
+      if (messageData.is_enabled !== undefined) {
+        updateData.is_active = messageData.is_enabled;
+        updateData.is_enabled = messageData.is_enabled;
+      }
+      if (messageData.is_blocking !== undefined) updateData.is_blocking = messageData.is_blocking;
+      if (messageData.priority !== undefined) updateData.priority = messageData.priority;
+      if (messageData.starts_at !== undefined) updateData.starts_at = messageData.starts_at;
+      if (messageData.expires_at !== undefined) updateData.expires_at = messageData.expires_at;
+      if (messageData.re_acknowledgment_mode !== undefined) updateData.re_acknowledgment_mode = messageData.re_acknowledgment_mode;
+      if (messageData.re_ack_period_days !== undefined) updateData.re_ack_period_days = messageData.re_ack_period_days;
+      if (messageData.require_acknowledgment !== undefined) updateData.require_acknowledgment = messageData.require_acknowledgment;
+      if (messageData.show_once_per_session !== undefined) updateData.show_once_per_session = messageData.show_once_per_session;
+      if (messageData.version !== undefined) updateData.version = messageData.version;
+
       const { error } = await supabase
         .from('popup_messages')
-        .update({
-          ...messageData,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
-
-      // Update targets
-      await supabase
-        .from('popup_message_targets')
-        .delete()
-        .eq('message_id', id);
-
-      if (data.target_type === 'specific_users' && target_user_ids?.length) {
-        const targets = target_user_ids.map(userId => ({
-          message_id: id,
-          user_id: userId
-        }));
-
-        const { error: targetError } = await supabase
-          .from('popup_message_targets')
-          .insert(targets);
-
-        if (targetError) throw targetError;
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['popup-messages'] });

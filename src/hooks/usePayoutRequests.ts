@@ -6,6 +6,7 @@ import { playPayoutSound, playNotificationSound } from '@/lib/notificationSound'
 import { logIPAction } from '@/hooks/useIPLogger';
 import { triggerPaymentConfetti } from '@/lib/confetti';
 import { createUserNotification } from '@/hooks/useUserInAppNotifications';
+import { Json } from '@/integrations/supabase/types';
 
 export interface PayoutStatusHistory {
   id: string;
@@ -33,6 +34,19 @@ export interface PayoutRequest {
   user_email?: string;
 }
 
+// Helper to safely parse JSON payout_details
+function parsePayoutDetails(details: Json | null): Record<string, string> {
+  if (!details) return {};
+  if (typeof details === 'object' && !Array.isArray(details)) {
+    const result: Record<string, string> = {};
+    for (const [key, value] of Object.entries(details)) {
+      result[key] = String(value ?? '');
+    }
+    return result;
+  }
+  return {};
+}
+
 export const usePayoutRequests = () => {
   const { user, session } = useAuth();
   const { toast } = useToast();
@@ -57,10 +71,10 @@ export const usePayoutRequests = () => {
         id: p.id,
         user_id: p.user_id,
         amount: Number(p.amount),
-        payment_method: p.payment_method,
-        payment_details: p.payment_details as Record<string, string>,
+        payment_method: p.payout_method,
+        payment_details: parsePayoutDetails(p.payout_details),
         status: p.status as PayoutRequest['status'],
-        admin_notes: p.admin_notes,
+        admin_notes: p.rejection_reason,
         created_at: p.created_at,
         processed_at: p.processed_at,
         processed_by: p.processed_by,
@@ -116,7 +130,7 @@ export const usePayoutRequests = () => {
         .eq('key', 'min_payout_amount')
         .single();
 
-      const minPayout = settings ? parseFloat(settings.value) : 50;
+      const minPayout = settings?.value ? parseFloat(String(settings.value)) : 50;
       if (amount < minPayout) {
         throw new Error(`Minimum payout amount is $${minPayout}`);
       }
@@ -152,8 +166,8 @@ export const usePayoutRequests = () => {
         .insert({
           user_id: user?.id,
           amount,
-          payment_method: paymentMethod,
-          payment_details: paymentDetails,
+          payout_method: paymentMethod,
+          payout_details: paymentDetails as unknown as Json,
           status: 'pending',
         })
         .select()
@@ -229,7 +243,7 @@ export const usePayoutRequests = () => {
         .single();
 
       // Build the admin notes with reason if provided
-      const adminNotes = reason 
+      const rejectionReason = reason 
         ? `Cancelled by user: ${reason}` 
         : 'Cancelled by user';
 
@@ -238,7 +252,7 @@ export const usePayoutRequests = () => {
         .from('payout_requests')
         .update({
           status: 'cancelled',
-          admin_notes: adminNotes,
+          rejection_reason: rejectionReason,
           processed_at: new Date().toISOString(),
         })
         .eq('id', payoutId)
@@ -246,22 +260,6 @@ export const usePayoutRequests = () => {
         .eq('status', 'pending');
 
       if (error) throw error;
-
-      // Log the status change to history
-      const { error: historyError } = await supabase
-        .from('payout_status_history')
-        .insert({
-          payout_id: payoutId,
-          old_status: 'pending',
-          new_status: 'cancelled',
-          changed_by: user?.id,
-          notes: adminNotes,
-        });
-
-      if (historyError) {
-        console.error('Status history insert error:', historyError);
-        // Don't throw - history logging shouldn't block the main operation
-      }
 
       // Send email notification to admin about cancelled payout
       try {
@@ -344,10 +342,10 @@ export const useAdminPayouts = () => {
           id: p.id,
           user_id: p.user_id,
           amount: Number(p.amount),
-          payment_method: p.payment_method,
-          payment_details: p.payment_details as Record<string, string>,
+          payment_method: p.payout_method,
+          payment_details: parsePayoutDetails(p.payout_details),
           status: p.status as PayoutRequest['status'],
-          admin_notes: p.admin_notes,
+          admin_notes: p.rejection_reason,
           created_at: p.created_at,
           processed_at: p.processed_at,
           processed_by: p.processed_by,
@@ -388,7 +386,7 @@ export const useAdminPayouts = () => {
         .from('payout_requests')
         .update({
           status,
-          admin_notes: adminNotes || null,
+          rejection_reason: adminNotes || null,
           processed_at: status === 'pending' ? null : new Date().toISOString(),
           processed_by: status === 'pending' ? null : user?.id,
         })
@@ -397,22 +395,6 @@ export const useAdminPayouts = () => {
       if (error) {
         console.error('Supabase update error:', error);
         throw error;
-      }
-
-      // Log the status change to history
-      const { error: historyError } = await supabase
-        .from('payout_status_history')
-        .insert({
-          payout_id: payoutId,
-          old_status: previousStatus || null,
-          new_status: status,
-          changed_by: user?.id,
-          notes: adminNotes || null,
-        });
-
-      if (historyError) {
-        console.error('Status history insert error:', historyError);
-        // Don't throw - history logging shouldn't block the main operation
       }
 
        // If approving/completing for the first time (from pending), deduct funds from wallet
@@ -499,17 +481,14 @@ export const useAdminPayouts = () => {
              throw updateError;
            }
 
-           const description =
-             status === 'rejected'
-               ? 'Payout rejected - funds returned'
-               : 'Payout reverted to pending - funds returned';
-
-           const { error: txError } = await supabase.from('wallet_transactions').insert({
-             user_id: userId,
-             amount: amount,
-             type: status === 'rejected' ? 'payout_refund' : 'payout_reverted',
-             description,
-           });
+           const { error: txError } = await supabase
+             .from('wallet_transactions')
+             .insert({
+               user_id: userId,
+               amount: amount,
+               type: 'payout_refund',
+               description: `Payout ${status} - funds refunded`,
+             });
 
            if (txError) {
              console.error('Transaction insert error:', txError);
@@ -518,159 +497,71 @@ export const useAdminPayouts = () => {
          }
        }
 
-      // Send email notification for status changes (not for pending)
-      if (status !== 'pending' && userEmail) {
-        const emailType = status === 'approved' 
-          ? 'payout_approved' 
-          : status === 'rejected' 
-            ? 'payout_rejected' 
-            : 'payout_completed';
-        
+      // Create notification for user
+      if (userId && status !== 'pending') {
         try {
-          await supabase.functions.invoke('send-notification-email', {
-            body: {
-              type: emailType,
-              userName: userName || 'User',
-              userEmail: userEmail,
-              amount: amount,
-              adminNotes: adminNotes,
-              recipientEmail: userEmail,
-            },
+          await createUserNotification(userId, {
+            title: `Payout ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+            message: status === 'approved' 
+              ? `Your payout request for $${amount.toFixed(2)} has been approved.`
+              : status === 'completed'
+              ? `Your payout of $${amount.toFixed(2)} has been completed.`
+              : `Your payout request for $${amount.toFixed(2)} has been rejected.${adminNotes ? ` Reason: ${adminNotes}` : ''}`,
+            type: status === 'rejected' ? 'warning' : 'success',
+            action_url: '/user/payments',
           });
-          console.log('Payout notification email sent successfully');
-        } catch (emailError) {
-          console.error('Failed to send payout notification email:', emailError);
-          // Don't throw - email failure shouldn't block the payout process
+        } catch (e) {
+          console.error('Failed to create notification:', e);
         }
       }
 
-      // Create in-app notification for the user
-      if (status !== 'pending') {
-        const notificationMessages: Record<string, { title: string; message: string }> = {
-          approved: { 
-            title: '✅ Payout Approved', 
-            message: `Your payout request of $${amount.toFixed(2)} has been approved and is being processed.` 
-          },
-          rejected: { 
-            title: '❌ Payout Rejected', 
-            message: `Your payout request of $${amount.toFixed(2)} was rejected.${adminNotes ? ` Reason: ${adminNotes}` : ''}` 
-          },
-          completed: { 
-            title: '🎉 Payout Completed', 
-            message: `Your payout of $${amount.toFixed(2)} has been sent to your account.` 
-          },
-        };
-        const notification = notificationMessages[status];
-        if (notification) {
-          await createUserNotification(
-            userId,
-            `payout_${status}`,
-            notification.title,
-            notification.message,
-            'payout',
-            payoutId
-          );
+      // Send email notification to user
+      if (userEmail) {
+        try {
+          await supabase.functions.invoke('send-notification-email', {
+            body: {
+              type: `payout_${status}`,
+              userName: userName || 'User',
+              recipientEmail: userEmail,
+              amount: amount,
+              adminNotes: adminNotes,
+            },
+          });
+        } catch (emailError) {
+          console.error('Failed to send payout status notification:', emailError);
         }
       }
 
       return { status };
     },
-    onSuccess: (result) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-payout-requests'], exact: false });
-      queryClient.invalidateQueries({ queryKey: ['admin-dropshipper-wallets'], exact: false });
-      queryClient.invalidateQueries({ queryKey: ['user-profile'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['user-payout-requests'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['user-profile'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['wallet-transactions'], exact: false });
-      queryClient.invalidateQueries({ queryKey: ['user-dashboard'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['dropshipper-wallets'], exact: false });
       
-      // Play notification sound
-      playNotificationSound();
-      
-      const statusMessages: Record<string, { title: string; description: string }> = {
-        approved: { title: 'Payout Approved', description: 'The payout has been approved and dropshipper notified.' },
-        rejected: { title: 'Payout Rejected', description: 'The payout has been rejected and dropshipper notified.' },
-        completed: { title: 'Payout Completed', description: 'The payout is complete and dropshipper notified.' },
-        pending: { title: 'Payout Reverted', description: 'The payout status has been reverted to pending.' },
-      };
-      const msg = statusMessages[result.status] || { title: 'Payout Updated', description: 'The payout status has been updated.' };
-      toast({ title: msg.title, description: msg.description });
+      toast({
+        title: 'Payout Updated',
+        description: `Payout has been ${data.status}.`,
+      });
     },
     onError: (error: Error) => {
       console.error('Error processing payout:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to process payout request.',
+        description: error.message || 'Failed to process payout.',
         variant: 'destructive',
       });
     },
   });
 
-  const pendingCount = payoutsQuery.data?.filter(p => p.status === 'pending').length || 0;
-  const totalPending = payoutsQuery.data?.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.amount, 0) || 0;
-
   return {
     payoutRequests: payoutsQuery.data || [],
-    pendingCount,
-    totalPending,
     isLoading: payoutsQuery.isLoading,
     error: payoutsQuery.error,
     refetch: payoutsQuery.refetch,
     processPayout: processPayoutMutation.mutate,
-    isProcessingPayout: processPayoutMutation.isPending,
-  };
-};
-
-// Hook to fetch payout status history
-export const usePayoutStatusHistory = (payoutId: string | null) => {
-  const { user, session } = useAuth();
-
-  const historyQuery = useQuery({
-    queryKey: ['payout-status-history', payoutId],
-    queryFn: async () => {
-      if (!payoutId) return [];
-
-      const { data, error } = await supabase
-        .from('payout_status_history')
-        .select('*')
-        .eq('payout_id', payoutId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching payout status history:', error);
-        throw error;
-      }
-
-      // Fetch admin names
-      const changedByIds = [...new Set((data || []).map(h => h.changed_by).filter(Boolean))];
-      let adminMap = new Map<string, string>();
-      
-      if (changedByIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('user_id, name')
-          .in('user_id', changedByIds as string[]);
-        
-        adminMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
-      }
-
-      return (data || []).map((h): PayoutStatusHistory => ({
-        id: h.id,
-        payout_id: h.payout_id,
-        old_status: h.old_status,
-        new_status: h.new_status,
-        changed_by: h.changed_by,
-        changed_by_name: h.changed_by ? adminMap.get(h.changed_by) || 'Admin' : 'System',
-        notes: h.notes,
-        created_at: h.created_at,
-      }));
-    },
-    enabled: !!payoutId && !!user && !!session,
-  });
-
-  return {
-    history: historyQuery.data || [],
-    isLoading: historyQuery.isLoading,
-    error: historyQuery.error,
-    refetch: historyQuery.refetch,
+    isProcessing: processPayoutMutation.isPending,
   };
 };

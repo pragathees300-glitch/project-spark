@@ -88,25 +88,28 @@ export const logIPAction = async (
 
     console.log('Logging IP action:', { userId, actionType, ipInfo });
 
-    // Use the secure SECURITY DEFINER function instead of direct insert
-    const { error } = await supabase.rpc('log_ip_action', {
-      _user_id: userId,
-      _ip_address: ipInfo.ip,
-      _action_type: actionType,
-      _country: ipInfo.country || null,
-      _city: ipInfo.city || null,
-      _region: ipInfo.region || null,
-    });
+    // Insert directly into ip_logs table instead of using RPC
+    const { error } = await supabase
+      .from('ip_logs')
+      .insert({
+        user_id: userId,
+        ip_address: ipInfo.ip,
+        action_type: actionType,
+        country: ipInfo.country || null,
+        city: ipInfo.city || null,
+        region: ipInfo.region || null,
+        user_agent: navigator.userAgent,
+      });
 
     if (error) {
       console.error('Failed to log IP action:', error);
       return false;
     }
 
-    // Also update the latest IP on the profile
+    // Also update the last login time on the profile
     await supabase
       .from('profiles')
-      .update({ last_ip_address: ipInfo.ip })
+      .update({ last_login_at: new Date().toISOString() })
       .eq('user_id', userId);
 
     console.log('IP action logged successfully');

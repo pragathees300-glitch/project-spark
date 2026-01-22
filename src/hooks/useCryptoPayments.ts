@@ -63,22 +63,29 @@ export function useCryptoPayments() {
     enabled: !!user,
   });
 
-  // Create a new crypto payment
+  // Create a new crypto payment - accepts both new format and legacy format
   const createPaymentMutation = useMutation({
     mutationFn: async (payment: {
       wallet_id?: string;
       amount: number;
       transaction_hash?: string;
       proof_url?: string;
+      // Legacy/extended fields (not stored in DB but accepted for compatibility)
+      wallet_name?: string;
+      wallet_address?: string;
+      currency_symbol?: string;
+      payment_purpose?: string;
+      payment_proof_url?: string;
+      order_id?: string;
     }) => {
       const { data, error } = await supabase
         .from('crypto_payments')
         .insert({
           user_id: user!.id,
-          wallet_id: payment.wallet_id,
+          wallet_id: payment.wallet_id || null,
           amount: payment.amount,
-          transaction_hash: payment.transaction_hash,
-          proof_url: payment.proof_url,
+          transaction_hash: payment.transaction_hash || null,
+          proof_url: payment.proof_url || payment.payment_proof_url || null,
         })
         .select()
         .single();

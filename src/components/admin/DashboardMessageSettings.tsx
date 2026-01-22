@@ -23,18 +23,31 @@ const DashboardMessageSettings = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingMessage, setEditingMessage] = useState<DashboardMessage | null>(null);
   const [searchUsers, setSearchUsers] = useState('');
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    title: string;
+    message: string;
+    message_type: 'info' | 'warning' | 'alert';
+    is_enabled: boolean;
+    show_to_admins: boolean;
+    show_to_users: boolean;
+    starts_at: string;
+    expires_at: string;
+    target_type: 'all' | 'specific_users' | 'by_role';
+    target_roles: string[];
+    target_user_ids: string[];
+    priority: number;
+  }>({
     title: '',
     message: '',
-    message_type: 'info' as 'info' | 'warning' | 'alert',
+    message_type: 'info',
     is_enabled: true,
     show_to_admins: true,
     show_to_users: true,
     starts_at: '',
     expires_at: '',
-    target_type: 'all' as 'all' | 'specific_users' | 'by_role',
-    target_roles: [] as string[],
-    target_user_ids: [] as string[],
+    target_type: 'all',
+    target_roles: [],
+    target_user_ids: [],
     priority: 0,
   });
 
@@ -64,17 +77,18 @@ const DashboardMessageSettings = () => {
 
   const openEditDialog = (msg: DashboardMessage) => {
     setEditingMessage(msg);
+    const msgType = msg.message_type || msg.type || 'info';
     setFormData({
       title: msg.title || '',
       message: msg.message,
-      message_type: msg.message_type,
-      is_enabled: msg.is_enabled,
-      show_to_admins: msg.show_to_admins,
-      show_to_users: msg.show_to_users,
+      message_type: (msgType === 'warning' || msgType === 'alert') ? msgType : 'info',
+      is_enabled: msg.is_enabled ?? msg.is_active ?? true,
+      show_to_admins: msg.show_to_admins ?? (msg.target_role === 'all' || msg.target_role === 'admin'),
+      show_to_users: msg.show_to_users ?? (msg.target_role === 'all' || msg.target_role === 'user'),
       starts_at: msg.starts_at ? format(new Date(msg.starts_at), "yyyy-MM-dd'T'HH:mm") : '',
-      expires_at: msg.expires_at ? format(new Date(msg.expires_at), "yyyy-MM-dd'T'HH:mm") : '',
+      expires_at: (msg.expires_at || msg.ends_at) ? format(new Date(msg.expires_at || msg.ends_at!), "yyyy-MM-dd'T'HH:mm") : '',
       target_type: msg.target_type || 'all',
-      target_roles: msg.target_roles || [],
+      target_roles: msg.target_roles || (msg.target_role ? [msg.target_role] : []),
       target_user_ids: msg.target_user_ids || [],
       priority: msg.priority || 0,
     });

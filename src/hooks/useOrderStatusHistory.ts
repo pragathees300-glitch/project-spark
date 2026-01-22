@@ -4,12 +4,14 @@ import { supabase } from '@/integrations/supabase/client';
 interface StatusHistoryItem {
   id: string;
   order_id: string;
-  old_status: string | null;
-  new_status: string;
+  status: string;
   changed_by: string | null;
-  changed_by_type: string;
   notes: string | null;
   created_at: string;
+  // Aliased properties for component compatibility
+  old_status: string | null;
+  new_status: string;
+  changed_by_type: string;
 }
 
 export const useOrderStatusHistory = (orderId: string | undefined) => {
@@ -25,7 +27,14 @@ export const useOrderStatusHistory = (orderId: string | undefined) => {
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data as StatusHistoryItem[];
+      
+      // Map database fields to expected interface
+      return (data || []).map((item, index, arr) => ({
+        ...item,
+        old_status: index < arr.length - 1 ? arr[index + 1].status : null,
+        new_status: item.status,
+        changed_by_type: item.changed_by ? 'admin' : 'system',
+      })) as StatusHistoryItem[];
     },
     enabled: !!orderId,
   });
@@ -45,56 +54,68 @@ interface PublicOrderStatus {
   product_name: string;
 }
 
-interface PublicStatusHistory {
-  new_status: string;
-  created_at: string;
-}
-
 export const usePublicOrderTracking = (orderNumber: string | undefined) => {
   const { data, isLoading, error } = useQuery({
     queryKey: ['public-order-tracking', orderNumber],
     queryFn: async () => {
       if (!orderNumber) return null;
       
-      // Use secure RPC function that only returns non-sensitive data
+      // Query orders directly with limited fields for public access
       const { data: orderData, error: orderError } = await supabase
-        .rpc('get_public_order_status', { p_order_number: orderNumber });
+        .from('orders')
+        .select('order_number, status, created_at, updated_at, storefront_product_id')
+        .eq('order_number', orderNumber)
+        .single();
       
       if (orderError) throw orderError;
-      if (!orderData || orderData.length === 0) {
+      if (!orderData) {
         throw new Error('Order not found');
       }
       
-      const order = orderData[0] as PublicOrderStatus;
+      // Get product name if available
+      let productName = 'Product';
+      if (orderData.storefront_product_id) {
+        const { data: productData } = await supabase
+          .from('storefront_products')
+          .select('products(name)')
+          .eq('id', orderData.storefront_product_id)
+          .single();
+        
+        if (productData?.products) {
+          productName = (productData.products as any).name || 'Product';
+        }
+      }
       
-      // Fetch status history using secure function
+      // Fetch status history
       const { data: historyData, error: historyError } = await supabase
-        .rpc('get_public_order_status_history', { p_order_number: orderNumber });
-      
-      if (historyError) throw historyError;
+        .from('order_status_history')
+        .select('status, created_at')
+        .eq('order_id', orderNumber)
+        .order('created_at', { ascending: false });
       
       // Transform history to match expected interface
-      const history: StatusHistoryItem[] = (historyData || []).map((h: PublicStatusHistory, index: number) => ({
+      const history: StatusHistoryItem[] = (historyData || []).map((h, index) => ({
         id: `${orderNumber}-${index}`,
         order_id: orderNumber,
-        old_status: null,
-        new_status: h.new_status,
+        status: h.status,
         changed_by: null,
-        changed_by_type: 'system',
         notes: null,
         created_at: h.created_at,
+        old_status: null,
+        new_status: h.status,
+        changed_by_type: 'system',
       }));
       
       // Construct order object compatible with the UI
-      // Note: Sensitive fields are NOT included from the secure function
+      // Note: Sensitive fields are NOT included for public access
       return {
         order: {
-          order_number: order.order_number,
-          status: order.status,
-          created_at: order.created_at,
-          updated_at: order.updated_at,
-          product_name: order.product_name,
-          // Placeholder values for fields not exposed by secure function
+          order_number: orderData.order_number,
+          status: orderData.status,
+          created_at: orderData.created_at,
+          updated_at: orderData.updated_at,
+          product_name: productName,
+          // Placeholder values for fields not exposed publicly
           customer_name: 'Customer', // Masked - not exposed publicly
           customer_email: '***@***.com', // Masked - not exposed publicly
           paid_at: null,
@@ -103,7 +124,7 @@ export const usePublicOrderTracking = (orderNumber: string | undefined) => {
           selling_price: 0,
           storefront_products: {
             products: {
-              name: order.product_name,
+              name: productName,
               image_url: null
             }
           }

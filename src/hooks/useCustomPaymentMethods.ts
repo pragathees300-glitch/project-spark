@@ -11,6 +11,9 @@ export interface CustomPaymentMethod {
   instructions: string | null;
   sort_order: number;
   created_at: string;
+  // Aliased properties for component compatibility
+  is_enabled: boolean;
+  custom_message: string | null;
 }
 
 export interface CreatePaymentMethodInput {
@@ -18,8 +21,11 @@ export interface CreatePaymentMethodInput {
   description?: string;
   icon_url?: string;
   is_active?: boolean;
+  is_enabled?: boolean;
   instructions?: string;
+  custom_message?: string;
   sort_order?: number;
+  method_type?: 'payment' | 'payout';
 }
 
 export interface UpdatePaymentMethodInput {
@@ -28,16 +34,18 @@ export interface UpdatePaymentMethodInput {
   description?: string;
   icon_url?: string;
   is_active?: boolean;
+  is_enabled?: boolean;
   instructions?: string;
+  custom_message?: string;
   sort_order?: number;
 }
 
-export function useCustomPaymentMethods() {
+export function useCustomPaymentMethods(type?: 'payment' | 'payout') {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const methodsQuery = useQuery({
-    queryKey: ['custom-payment-methods'],
+    queryKey: ['custom-payment-methods', type],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('custom_payment_methods')
@@ -45,7 +53,13 @@ export function useCustomPaymentMethods() {
         .order('sort_order', { ascending: true });
 
       if (error) throw error;
-      return data as CustomPaymentMethod[];
+      
+      // Map database fields to component-expected fields
+      return (data || []).map(item => ({
+        ...item,
+        is_enabled: item.is_active,
+        custom_message: item.instructions,
+      })) as CustomPaymentMethod[];
     },
   });
 
@@ -57,15 +71,19 @@ export function useCustomPaymentMethods() {
           name: input.name,
           description: input.description || null,
           icon_url: input.icon_url || null,
-          is_active: input.is_active ?? true,
-          instructions: input.instructions || null,
+          is_active: input.is_enabled ?? input.is_active ?? true,
+          instructions: input.custom_message ?? input.instructions ?? null,
           sort_order: input.sort_order ?? 0,
         })
         .select()
         .single();
 
       if (error) throw error;
-      return data as CustomPaymentMethod;
+      return {
+        ...data,
+        is_enabled: data.is_active,
+        custom_message: data.instructions,
+      } as CustomPaymentMethod;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['custom-payment-methods'] });
@@ -93,7 +111,9 @@ export function useCustomPaymentMethods() {
       if (updates.description !== undefined) updateData.description = updates.description;
       if (updates.icon_url !== undefined) updateData.icon_url = updates.icon_url;
       if (updates.is_active !== undefined) updateData.is_active = updates.is_active;
+      if (updates.is_enabled !== undefined) updateData.is_active = updates.is_enabled;
       if (updates.instructions !== undefined) updateData.instructions = updates.instructions;
+      if (updates.custom_message !== undefined) updateData.instructions = updates.custom_message;
       if (updates.sort_order !== undefined) updateData.sort_order = updates.sort_order;
 
       const { data, error } = await supabase
@@ -104,7 +124,11 @@ export function useCustomPaymentMethods() {
         .single();
 
       if (error) throw error;
-      return data as CustomPaymentMethod;
+      return {
+        ...data,
+        is_enabled: data.is_active,
+        custom_message: data.instructions,
+      } as CustomPaymentMethod;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['custom-payment-methods'] });
@@ -150,10 +174,10 @@ export function useCustomPaymentMethods() {
   });
 
   const toggleMethodMutation = useMutation({
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+    mutationFn: async ({ id, is_active, is_enabled }: { id: string; is_active?: boolean; is_enabled?: boolean }) => {
       const { error } = await supabase
         .from('custom_payment_methods')
-        .update({ is_active })
+        .update({ is_active: is_enabled ?? is_active })
         .eq('id', id);
 
       if (error) throw error;

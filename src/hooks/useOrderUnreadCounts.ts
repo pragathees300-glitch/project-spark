@@ -14,7 +14,7 @@ export const useOrderUnreadCounts = () => {
       const { data, error } = await supabase
         .from('order_chat_messages')
         .select('order_id')
-        .eq('sender_type', 'user')
+        .eq('sender_role', 'user')
         .eq('is_read', false);
 
       if (error) throw error;

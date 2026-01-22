@@ -19,23 +19,48 @@ export const useLoginRateLimit = () => {
       const ipInfo = await getClientIPInfo();
       const ipAddress = ipInfo?.ip || null;
 
-      const { data, error } = await supabase.rpc('check_login_rate_limit', {
-        _email: email,
-        _ip_address: ipAddress,
-      });
+      // Check recent failed attempts from login_attempts table
+      const windowMinutes = 15;
+      const maxAttempts = 5;
+      const lockoutMinutes = 30;
+      
+      const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+      
+      const { data: attempts, error } = await supabase
+        .from('login_attempts')
+        .select('created_at')
+        .eq('email', email)
+        .eq('success', false)
+        .gte('created_at', windowStart);
 
       if (error) {
         console.error('Rate limit check error:', error);
         // If check fails, allow the attempt (fail open for UX)
         return {
           blocked: false,
-          remaining_attempts: 5,
+          remaining_attempts: maxAttempts,
           retry_after_seconds: 0,
           reason: null,
         };
       }
 
-      const result = data as unknown as RateLimitResult;
+      const failedCount = attempts?.length || 0;
+      const isBlocked = failedCount >= maxAttempts;
+      
+      let retryAfterSeconds = 0;
+      if (isBlocked && attempts && attempts.length > 0) {
+        const lastAttempt = new Date(attempts[0].created_at);
+        const unblockTime = new Date(lastAttempt.getTime() + lockoutMinutes * 60 * 1000);
+        retryAfterSeconds = Math.max(0, Math.ceil((unblockTime.getTime() - Date.now()) / 1000));
+      }
+
+      const result: RateLimitResult = {
+        blocked: isBlocked && retryAfterSeconds > 0,
+        remaining_attempts: Math.max(0, maxAttempts - failedCount),
+        retry_after_seconds: retryAfterSeconds,
+        reason: isBlocked ? 'Too many failed login attempts' : null,
+      };
+      
       setRateLimitInfo(result);
       return result;
     } catch (error) {
@@ -56,11 +81,15 @@ export const useLoginRateLimit = () => {
       const ipInfo = await getClientIPInfo();
       const ipAddress = ipInfo?.ip || null;
 
-      await supabase.rpc('record_login_attempt', {
-        _email: email,
-        _ip_address: ipAddress,
-        _was_successful: wasSuccessful,
-      });
+      await supabase
+        .from('login_attempts')
+        .insert({
+          email,
+          ip_address: ipAddress,
+          success: wasSuccessful,
+          user_agent: navigator.userAgent,
+          failure_reason: wasSuccessful ? null : 'Invalid credentials',
+        });
     } catch (error) {
       console.error('Failed to record login attempt:', error);
     }

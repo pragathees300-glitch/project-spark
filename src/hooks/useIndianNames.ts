@@ -7,7 +7,7 @@ export interface IndianName {
   name: string;
   is_active: boolean;
   created_at: string;
-  created_by: string | null;
+  gender?: string | null;
 }
 
 export const useIndianNames = () => {
@@ -17,8 +17,9 @@ export const useIndianNames = () => {
   const { data: names = [], isLoading } = useQuery({
     queryKey: ['indian-names'],
     queryFn: async () => {
+      // Use indian_names_list table which has the name field
       const { data, error } = await supabase
-        .from('indian_names')
+        .from('indian_names_list')
         .select('*')
         .order('name', { ascending: true });
 
@@ -30,8 +31,8 @@ export const useIndianNames = () => {
   const addNameMutation = useMutation({
     mutationFn: async (name: string) => {
       const { data, error } = await supabase
-        .from('indian_names')
-        .insert({ name: name.trim() })
+        .from('indian_names_list')
+        .insert({ name: name.trim(), is_active: true })
         .select()
         .single();
 
@@ -59,7 +60,7 @@ export const useIndianNames = () => {
   const updateNameMutation = useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
       const { data, error } = await supabase
-        .from('indian_names')
+        .from('indian_names_list')
         .update({ name: name.trim() })
         .eq('id', id)
         .select()
@@ -87,7 +88,7 @@ export const useIndianNames = () => {
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       const { data, error } = await supabase
-        .from('indian_names')
+        .from('indian_names_list')
         .update({ is_active })
         .eq('id', id)
         .select()
@@ -115,7 +116,7 @@ export const useIndianNames = () => {
   const deleteNameMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from('indian_names')
+        .from('indian_names_list')
         .delete()
         .eq('id', id);
 

@@ -14,6 +14,16 @@ export interface DashboardMessage {
   ends_at: string | null;
   created_by: string | null;
   created_at: string;
+  // Aliased properties for component compatibility
+  message_type: string;
+  is_enabled: boolean;
+  show_to_admins: boolean;
+  show_to_users: boolean;
+  expires_at: string | null;
+  target_type: 'all' | 'specific_users' | 'by_role';
+  target_roles: string[];
+  target_user_ids: string[];
+  priority: number;
 }
 
 export const useDashboardMessages = (isAdmin: boolean = false) => {
@@ -32,7 +42,20 @@ export const useDashboardMessages = (isAdmin: boolean = false) => {
           .order('created_at', { ascending: false });
 
         if (messagesError) throw messagesError;
-        return messagesData as DashboardMessage[];
+        
+        // Map database fields to component-expected fields
+        return (messagesData || []).map(msg => ({
+          ...msg,
+          message_type: msg.type || 'info',
+          is_enabled: msg.is_active,
+          show_to_admins: msg.target_role === 'all' || msg.target_role === 'admin',
+          show_to_users: msg.target_role === 'all' || msg.target_role === 'user',
+          expires_at: msg.ends_at,
+          target_type: 'all' as const,
+          target_roles: msg.target_role ? [msg.target_role] : [],
+          target_user_ids: [],
+          priority: 0,
+        })) as DashboardMessage[];
       } else {
         // Users fetch only active messages targeted to them
         const currentUserId = user?.id;
@@ -59,27 +82,48 @@ export const useDashboardMessages = (isAdmin: boolean = false) => {
           .order('created_at', { ascending: false });
 
         if (messagesError) throw messagesError;
-        return messagesData as DashboardMessage[];
+        
+        // Map database fields to component-expected fields
+        return (messagesData || []).map(msg => ({
+          ...msg,
+          message_type: msg.type || 'info',
+          is_enabled: msg.is_active,
+          show_to_admins: msg.target_role === 'all' || msg.target_role === 'admin',
+          show_to_users: msg.target_role === 'all' || msg.target_role === 'user',
+          expires_at: msg.ends_at,
+          target_type: 'all' as const,
+          target_roles: msg.target_role ? [msg.target_role] : [],
+          target_user_ids: [],
+          priority: 0,
+        })) as DashboardMessage[];
       }
     },
     enabled: isAdmin || !!user?.id,
   });
 
   const createMessage = useMutation({
-    mutationFn: async (newMessage: Omit<Partial<DashboardMessage>, 'id' | 'created_at'> & { 
+    mutationFn: async (newMessage: Partial<DashboardMessage> & { 
       title: string;
       message: string;
     }) => {
+      // Determine target_role from component fields
+      let targetRole = 'all';
+      if (newMessage.show_to_admins && !newMessage.show_to_users) {
+        targetRole = 'admin';
+      } else if (newMessage.show_to_users && !newMessage.show_to_admins) {
+        targetRole = 'user';
+      }
+      
       const { data: createdMessage, error: messageError } = await supabase
         .from('dashboard_messages')
         .insert([{
           title: newMessage.title,
           message: newMessage.message,
-          type: newMessage.type || 'info',
-          is_active: newMessage.is_active ?? true,
-          target_role: newMessage.target_role || 'all',
+          type: newMessage.message_type || newMessage.type || 'info',
+          is_active: newMessage.is_enabled ?? newMessage.is_active ?? true,
+          target_role: targetRole,
           starts_at: newMessage.starts_at,
-          ends_at: newMessage.ends_at,
+          ends_at: newMessage.expires_at || newMessage.ends_at,
           created_by: user?.id,
         }])
         .select()
@@ -99,9 +143,33 @@ export const useDashboardMessages = (isAdmin: boolean = false) => {
 
   const updateMessage = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<DashboardMessage> & { id: string }) => {
+      // Map component fields to database fields
+      const dbUpdates: Record<string, unknown> = {};
+      
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.message !== undefined) dbUpdates.message = updates.message;
+      if (updates.message_type !== undefined) dbUpdates.type = updates.message_type;
+      if (updates.type !== undefined) dbUpdates.type = updates.type;
+      if (updates.is_enabled !== undefined) dbUpdates.is_active = updates.is_enabled;
+      if (updates.is_active !== undefined) dbUpdates.is_active = updates.is_active;
+      if (updates.starts_at !== undefined) dbUpdates.starts_at = updates.starts_at;
+      if (updates.expires_at !== undefined) dbUpdates.ends_at = updates.expires_at;
+      if (updates.ends_at !== undefined) dbUpdates.ends_at = updates.ends_at;
+      
+      // Determine target_role from show_to fields
+      if (updates.show_to_admins !== undefined || updates.show_to_users !== undefined) {
+        if (updates.show_to_admins && !updates.show_to_users) {
+          dbUpdates.target_role = 'admin';
+        } else if (updates.show_to_users && !updates.show_to_admins) {
+          dbUpdates.target_role = 'user';
+        } else {
+          dbUpdates.target_role = 'all';
+        }
+      }
+      
       const { data, error } = await supabase
         .from('dashboard_messages')
-        .update(updates)
+        .update(dbUpdates)
         .eq('id', id)
         .select()
         .single();

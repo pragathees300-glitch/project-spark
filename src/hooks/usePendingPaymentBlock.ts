@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Json } from '@/integrations/supabase/types';
 
 export interface PendingPaymentBlockSettings {
   enabled: boolean;
@@ -18,6 +19,25 @@ const DEFAULT_SETTINGS: PendingPaymentBlockSettings = {
   showViewOrdersLink: true,
 };
 
+// Helper to safely parse JSON settings
+function parseJsonSettings(value: Json | null | undefined): PendingPaymentBlockSettings {
+  if (!value) return DEFAULT_SETTINGS;
+  
+  if (typeof value === 'string') {
+    try {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(value) };
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
+  }
+  
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return { ...DEFAULT_SETTINGS, ...value } as PendingPaymentBlockSettings;
+  }
+  
+  return DEFAULT_SETTINGS;
+}
+
 export function usePendingPaymentBlock() {
   const { user } = useAuth();
 
@@ -27,9 +47,9 @@ export function usePendingPaymentBlock() {
     queryFn: async () => {
       if (!user?.id) return { count: 0, orders: [] };
 
-      const { data, error, count } = await (supabase
+      const { data, error, count } = await supabase
         .from('orders')
-        .select('id, order_number, selling_price, quantity, created_at', { count: 'exact' }) as any)
+        .select('id, order_number, selling_price, quantity, created_at', { count: 'exact' })
         .eq('dropshipper_user_id', user.id)
         .eq('status', 'pending_payment')
         .order('created_at', { ascending: false });
@@ -62,15 +82,7 @@ export function usePendingPaymentBlock() {
         throw error;
       }
 
-      if (data?.value) {
-        try {
-          return { ...DEFAULT_SETTINGS, ...JSON.parse(data.value) };
-        } catch {
-          return DEFAULT_SETTINGS;
-        }
-      }
-
-      return DEFAULT_SETTINGS;
+      return parseJsonSettings(data?.value);
     },
     enabled: !!user?.id,
   });
@@ -109,15 +121,7 @@ export function usePendingPaymentBlockAdmin() {
         throw error;
       }
 
-      if (data?.value) {
-        try {
-          return { ...DEFAULT_SETTINGS, ...JSON.parse(data.value) };
-        } catch {
-          return DEFAULT_SETTINGS;
-        }
-      }
-
-      return DEFAULT_SETTINGS;
+      return parseJsonSettings(data?.value);
     },
     enabled: isAdmin,
   });
@@ -127,7 +131,7 @@ export function usePendingPaymentBlockAdmin() {
       .from('platform_settings')
       .upsert({
         key: 'pending_payment_block_settings',
-        value: JSON.stringify(newSettings),
+        value: newSettings as unknown as Json,
         description: 'Settings for blocking payout requests when user has pending order payments',
         updated_at: new Date().toISOString(),
       }, {

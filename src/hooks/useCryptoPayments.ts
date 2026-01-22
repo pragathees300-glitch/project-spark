@@ -17,8 +17,6 @@ export interface CryptoPayment {
   // Joined fields
   user_email?: string;
   user_name?: string;
-  order_number?: string;
-  order_total?: number;
 }
 
 export function useCryptoPayments() {
@@ -28,11 +26,10 @@ export function useCryptoPayments() {
 
   const userRole = user?.role;
 
-  // Fetch all crypto payments (admin) or user's own payments
   const paymentsQuery = useQuery({
     queryKey: ['crypto-payments', userRole],
     queryFn: async () => {
-      let query = supabase
+      const query = supabase
         .from('crypto_payments')
         .select('*')
         .order('created_at', { ascending: false });
@@ -40,7 +37,6 @@ export function useCryptoPayments() {
       const { data, error } = await query;
       if (error) throw error;
 
-      // For admin, fetch user details
       if (userRole === 'admin' && data && data.length > 0) {
         const userIds = [...new Set(data.map(p => p.user_id))];
         const { data: profiles } = await supabase
@@ -63,20 +59,12 @@ export function useCryptoPayments() {
     enabled: !!user,
   });
 
-  // Create a new crypto payment - accepts both new format and legacy format
   const createPaymentMutation = useMutation({
     mutationFn: async (payment: {
       wallet_id?: string;
       amount: number;
       transaction_hash?: string;
       proof_url?: string;
-      // Legacy/extended fields (not stored in DB but accepted for compatibility)
-      wallet_name?: string;
-      wallet_address?: string;
-      currency_symbol?: string;
-      payment_purpose?: string;
-      payment_proof_url?: string;
-      order_id?: string;
     }) => {
       const { data, error } = await supabase
         .from('crypto_payments')
@@ -85,7 +73,7 @@ export function useCryptoPayments() {
           wallet_id: payment.wallet_id || null,
           amount: payment.amount,
           transaction_hash: payment.transaction_hash || null,
-          proof_url: payment.proof_url || payment.payment_proof_url || null,
+          proof_url: payment.proof_url || null,
         })
         .select()
         .single();
@@ -109,7 +97,6 @@ export function useCryptoPayments() {
     },
   });
 
-  // Update transaction hash (user)
   const updateTransactionHashMutation = useMutation({
     mutationFn: async ({ paymentId, transactionHash }: { paymentId: string; transactionHash: string }) => {
       const { data, error } = await supabase
@@ -138,7 +125,6 @@ export function useCryptoPayments() {
     },
   });
 
-  // Verify or reject payment (admin) - uses Edge Function for proper permissions
   const updatePaymentStatusMutation = useMutation({
     mutationFn: async ({ 
       paymentId, 
@@ -149,7 +135,6 @@ export function useCryptoPayments() {
       status: 'confirmed' | 'rejected'; 
       adminNotes?: string;
     }) => {
-      // Use Edge Function for wallet/postpaid operations (bypasses RLS for self-hosted)
       const { data, error } = await supabase.functions.invoke('verify-crypto-payment', {
         body: {
           paymentId,
@@ -176,25 +161,13 @@ export function useCryptoPayments() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['crypto-payments'] });
-      queryClient.invalidateQueries({ queryKey: ['postpaid-status'] });
-      queryClient.invalidateQueries({ queryKey: ['postpaid-transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['user-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['user-dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['dropshipper-wallets'] });
       
-      const isPostpaid = data.postpaidCleared;
-      const isWalletCredited = data.walletCredited;
       toast({
         title: data.status === 'confirmed' ? 'Payment Verified' : 'Payment Rejected',
         description: data.status === 'confirmed' 
-          ? isPostpaid
-            ? 'Payment verified and postpaid dues have been auto-cleared.'
-            : isWalletCredited
-              ? `Payment verified and wallet has been credited.${data.newBalance ? ` New balance: $${data.newBalance.toFixed(2)}` : ''}`
-              : 'Payment has been verified.'
-          : 'The payment has been rejected. User has been notified.',
+          ? 'Payment has been verified and processed.'
+          : 'The payment has been rejected.',
       });
     },
     onError: (error: Error) => {
@@ -206,7 +179,6 @@ export function useCryptoPayments() {
     },
   });
 
-  // Get counts by status
   const paymentCounts = {
     pending: paymentsQuery.data?.filter(p => p.status === 'pending').length || 0,
     confirmed: paymentsQuery.data?.filter(p => p.status === 'confirmed').length || 0,

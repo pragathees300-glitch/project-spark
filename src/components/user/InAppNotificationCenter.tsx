@@ -8,18 +8,13 @@ import {
 } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { useUserInAppNotifications, UserNotification } from '@/hooks/useUserInAppNotifications';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-const getNotificationIcon = (type: string, entityType: string | null) => {
-  if (entityType === 'order') return Package;
-  if (entityType === 'payout') return Wallet;
-  if (entityType === 'proof') return Briefcase;
-  if (entityType === 'chat') return MessageSquare;
+const getNotificationIcon = (type: string | null) => {
+  if (!type) return Bell;
   
-  // Fallback based on type
   if (type.includes('order')) return Package;
   if (type.includes('payout')) return Wallet;
   if (type.includes('proof') || type.includes('workspace')) return Briefcase;
@@ -28,7 +23,9 @@ const getNotificationIcon = (type: string, entityType: string | null) => {
   return Bell;
 };
 
-const getNotificationColor = (type: string) => {
+const getNotificationColor = (type: string | null) => {
+  if (!type) return 'text-blue-500 bg-blue-500/10';
+  
   if (type.includes('approved') || type.includes('completed') || type.includes('success')) {
     return 'text-green-500 bg-green-500/10';
   }
@@ -48,7 +45,7 @@ interface NotificationItemProps {
 }
 
 function NotificationItem({ notification, onMarkAsRead, onDelete }: NotificationItemProps) {
-  const Icon = getNotificationIcon(notification.type, notification.entity_type);
+  const Icon = getNotificationIcon(notification.type);
   const colorClass = getNotificationColor(notification.type);
 
   return (

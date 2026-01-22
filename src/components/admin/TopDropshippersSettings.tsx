@@ -7,8 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Trophy, Plus, Pencil, Trash2, Crown, Medal, Award, Users, GripVertical, Package, IndianRupee } from 'lucide-react';
+import { Trophy, Plus, Pencil, Trash2, Crown, Medal, Award, GripVertical, IndianRupee } from 'lucide-react';
 import { useTopDropshippers, TopDropshipper } from '@/hooks/useTopDropshippers';
 import { useAdminUsers } from '@/hooks/useAdminUsers';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -80,6 +79,8 @@ const SortableDropshipperRow: React.FC<SortableDropshipperRowProps> = ({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const sortOrder = entry.sort_order ?? entry.rank ?? 0;
+
   return (
     <div
       ref={setNodeRef}
@@ -88,7 +89,6 @@ const SortableDropshipperRow: React.FC<SortableDropshipperRowProps> = ({
         !entry.is_active ? 'opacity-50' : ''
       }`}
     >
-      {/* Drag Handle */}
       <button
         className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
         {...attributes}
@@ -97,48 +97,32 @@ const SortableDropshipperRow: React.FC<SortableDropshipperRowProps> = ({
         <GripVertical className="w-5 h-5" />
       </button>
 
-      {/* Rank Icon */}
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getRankColor(entry.rank_position)}`}>
-        {getRankIcon(entry.rank_position)}
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getRankColor(sortOrder)}`}>
+        {getRankIcon(sortOrder)}
       </div>
 
-      {/* Name and Stats */}
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <span className="font-medium">{entry.display_name}</span>
           <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-            #{entry.rank_position}
+            #{sortOrder}
           </span>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
           <span className="flex items-center gap-1">
-            <Package className="w-3 h-3" />
-            {entry.orders_count || 0} orders
-          </span>
-          <span className="flex items-center gap-1">
             <IndianRupee className="w-3 h-3" />
-            {(entry.earnings_amount || 0).toLocaleString()}
+            {(entry.earnings || 0).toLocaleString()}
           </span>
-          {entry.badge_title && (
-            <Badge 
-              variant="outline" 
-              className="bg-gradient-to-r from-amber-200/50 to-amber-300/50 text-amber-700 border-amber-400/50 text-xs"
-            >
-              {entry.badge_title}
-            </Badge>
-          )}
         </div>
       </div>
 
-      {/* Toggle Active */}
       <Switch
-        checked={entry.is_active}
+        checked={entry.is_active ?? true}
         onCheckedChange={(checked) =>
           onToggle({ id: entry.id, is_active: checked })
         }
       />
 
-      {/* Edit Button */}
       <Button
         variant="ghost"
         size="icon"
@@ -147,7 +131,6 @@ const SortableDropshipperRow: React.FC<SortableDropshipperRowProps> = ({
         <Pencil className="w-4 h-4" />
       </Button>
 
-      {/* Delete Button */}
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
@@ -176,13 +159,11 @@ const SortableDropshipperRow: React.FC<SortableDropshipperRowProps> = ({
 export const TopDropshippersSettings: React.FC = () => {
   const {
     allDropshippers,
-    allUserRanks,
     isLoading,
     upsertDropshipper,
     deleteDropshipper,
     toggleActive,
     reorderDropshippers,
-    setUserRank,
     isUpdating,
   } = useTopDropshippers();
   
@@ -191,21 +172,12 @@ export const TopDropshippersSettings: React.FC = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TopDropshipper | null>(null);
   const [formData, setFormData] = useState({
-    user_id: '',
     display_name: '',
-    rank_position: 1,
-    badge_title: 'Top Performer',
-    orders_count: 0,
-    earnings_amount: 0,
+    rank: 1,
+    earnings: 0,
     is_active: true,
   });
 
-  const [userRankForm, setUserRankForm] = useState({
-    user_id: '',
-    position: 11,
-  });
-
-  // Drag and drop sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -213,7 +185,7 @@ export const TopDropshippersSettings: React.FC = () => {
     })
   );
 
-  const sortedDropshippers = [...allDropshippers].sort((a, b) => a.rank_position - b.rank_position);
+  const sortedDropshippers = [...allDropshippers].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -226,45 +198,28 @@ export const TopDropshippersSettings: React.FC = () => {
         const reordered = arrayMove(sortedDropshippers, oldIndex, newIndex);
         const updates = reordered.map((item, index) => ({
           id: item.id,
-          rank_position: index + 1,
+          sort_order: index + 1,
         }));
         reorderDropshippers(updates);
       }
     }
   };
 
-  const getAvailablePositions = () => {
-    const takenPositions = allDropshippers
-      .filter((d) => d.id !== editingEntry?.id)
-      .map((d) => d.rank_position);
-    return Array.from({ length: 10 }, (_, i) => i + 1).filter(
-      (pos) => !takenPositions.includes(pos)
-    );
-  };
-
   const handleOpenDialog = (entry?: TopDropshipper) => {
     if (entry) {
       setEditingEntry(entry);
       setFormData({
-        user_id: entry.user_id || '',
         display_name: entry.display_name,
-        rank_position: entry.rank_position,
-        badge_title: entry.badge_title || 'Top Performer',
-        orders_count: entry.orders_count || 0,
-        earnings_amount: entry.earnings_amount || 0,
-        is_active: entry.is_active,
+        rank: entry.rank ?? 1,
+        earnings: entry.earnings ?? 0,
+        is_active: entry.is_active ?? true,
       });
     } else {
       setEditingEntry(null);
-      const availablePositions = getAvailablePositions();
-      const nextPosition = availablePositions[0] || 1;
       setFormData({
-        user_id: '',
         display_name: '',
-        rank_position: nextPosition,
-        badge_title: 'Top Performer',
-        orders_count: 0,
-        earnings_amount: 0,
+        rank: allDropshippers.length + 1,
+        earnings: 0,
         is_active: true,
       });
     }
@@ -276,13 +231,11 @@ export const TopDropshippersSettings: React.FC = () => {
     
     upsertDropshipper({
       ...(editingEntry ? { id: editingEntry.id } : {}),
-      user_id: formData.user_id || null,
       display_name: formData.display_name,
-      rank_position: formData.rank_position,
-      badge_title: formData.badge_title,
-      orders_count: formData.orders_count,
-      earnings_amount: formData.earnings_amount,
+      rank: formData.rank,
+      earnings: formData.earnings,
       is_active: formData.is_active,
+      sort_order: editingEntry?.sort_order ?? allDropshippers.length + 1,
     });
     setIsDialogOpen(false);
   };
@@ -291,22 +244,14 @@ export const TopDropshippersSettings: React.FC = () => {
     if (userId === 'custom') {
       setFormData((prev) => ({
         ...prev,
-        user_id: '',
       }));
     } else {
       const selectedUser = dropshippers?.find((u) => u.id === userId);
       setFormData((prev) => ({
         ...prev,
-        user_id: userId,
         display_name: selectedUser?.name || prev.display_name,
       }));
     }
-  };
-
-  const handleSetUserRank = () => {
-    if (!userRankForm.user_id) return;
-    setUserRank({ userId: userRankForm.user_id, position: userRankForm.position });
-    setUserRankForm({ user_id: '', position: 11 });
   };
 
   if (isLoading) {
@@ -332,7 +277,7 @@ export const TopDropshippersSettings: React.FC = () => {
           <div>
             <CardTitle className="text-lg">Top Dropshippers Leaderboard</CardTitle>
             <CardDescription>
-              Manually add names, positions, orders & earnings. Drag to reorder.
+              Manually add names, positions & earnings. Drag to reorder.
             </CardDescription>
           </div>
         </div>
@@ -358,7 +303,7 @@ export const TopDropshippersSettings: React.FC = () => {
               <div className="space-y-2">
                 <Label>Link to User (Optional)</Label>
                 <Select
-                  value={formData.user_id || 'custom'}
+                  value="custom"
                   onValueChange={handleUserSelect}
                 >
                   <SelectTrigger>
@@ -373,9 +318,6 @@ export const TopDropshippersSettings: React.FC = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Optional: Link to existing user or enter a custom name below
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -390,59 +332,34 @@ export const TopDropshippersSettings: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Position (1-10) *</Label>
+                <Label>Position (1-10)</Label>
                 <Input
                   type="number"
                   min={1}
                   max={10}
-                  value={formData.rank_position}
+                  value={formData.rank}
                   onChange={(e) => {
                     const value = parseInt(e.target.value) || 1;
                     setFormData((prev) => ({ 
                       ...prev, 
-                      rank_position: Math.min(10, Math.max(1, value)) 
+                      rank: Math.min(10, Math.max(1, value)) 
                     }));
                   }}
                   placeholder="Enter position (1-10)"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Orders Count</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={formData.orders_count}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, orders_count: parseInt(e.target.value) || 0 }))
-                    }
-                    placeholder="e.g., 150"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Earnings (₹)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={formData.earnings_amount}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, earnings_amount: parseFloat(e.target.value) || 0 }))
-                    }
-                    placeholder="e.g., 50000"
-                  />
-                </div>
-              </div>
-
               <div className="space-y-2">
-                <Label>Badge Title</Label>
+                <Label>Earnings (₹)</Label>
                 <Input
-                  value={formData.badge_title}
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={formData.earnings}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, badge_title: e.target.value }))
+                    setFormData((prev) => ({ ...prev, earnings: parseFloat(e.target.value) || 0 }))
                   }
-                  placeholder="e.g., Top Performer, Elite Seller"
+                  placeholder="e.g., 50000"
                 />
               </div>
 
@@ -456,13 +373,12 @@ export const TopDropshippersSettings: React.FC = () => {
                 />
               </div>
 
-              {/* Preview */}
               <div className="space-y-2">
                 <Label className="text-muted-foreground text-xs">Preview</Label>
                 <div className="p-3 bg-card border rounded-lg">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getRankColor(formData.rank_position)}`}>
-                      {getRankIcon(formData.rank_position)}
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getRankColor(formData.rank)}`}>
+                      {getRankIcon(formData.rank)}
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
@@ -470,20 +386,14 @@ export const TopDropshippersSettings: React.FC = () => {
                           {formData.display_name || 'Dropshipper Name'}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          #{formData.rank_position}
+                          #{formData.rank}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                        <span>{formData.orders_count} orders</span>
-                        <span>₹{formData.earnings_amount.toLocaleString()}</span>
+                        <span>₹{formData.earnings.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
-                  {formData.badge_title && (
-                    <Badge variant="outline" className="mt-2 bg-gradient-to-r from-amber-200 to-amber-300 text-amber-800 border-amber-400">
-                      {formData.badge_title}
-                    </Badge>
-                  )}
                 </div>
               </div>
             </div>
@@ -498,125 +408,36 @@ export const TopDropshippersSettings: React.FC = () => {
           </DialogContent>
         </Dialog>
       </CardHeader>
-      
-      <CardContent>
-        <Tabs defaultValue="top10" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="top10">Top 10 Management</TabsTrigger>
-            <TabsTrigger value="user-ranks">User Rank Reference</TabsTrigger>
-          </TabsList>
 
-          <TabsContent value="top10" className="space-y-3">
-            {sortedDropshippers.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Trophy className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No dropshippers added yet</p>
-                <p className="text-sm">Click "Add Dropshipper" to add your first entry</p>
-              </div>
-            ) : (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={sortedDropshippers.map((d) => d.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <div className="space-y-2">
-                    {sortedDropshippers.map((entry) => (
-                      <SortableDropshipperRow
-                        key={entry.id}
-                        entry={entry}
-                        onEdit={handleOpenDialog}
-                        onDelete={deleteDropshipper}
-                        onToggle={toggleActive}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            )}
-
-            {allDropshippers.length > 0 && allDropshippers.length < 10 && (
-              <p className="text-xs text-muted-foreground text-center pt-2">
-                {10 - allDropshippers.length} positions remaining
-              </p>
-            )}
-          </TabsContent>
-
-          <TabsContent value="user-ranks" className="space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Set User Position Reference
-                </CardTitle>
-                <CardDescription>
-                  Set the rank shown for users not in the Top 10 (displayed as their position)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-4 items-end">
-                  <div className="flex-1 space-y-2">
-                    <Label>Select User</Label>
-                    <Select
-                      value={userRankForm.user_id}
-                      onValueChange={(v) => setUserRankForm((prev) => ({ ...prev, user_id: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select user" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dropshippers?.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name} ({user.email})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="w-32 space-y-2">
-                    <Label>Position</Label>
-                    <Input
-                      type="number"
-                      min={11}
-                      value={userRankForm.position}
-                      onChange={(e) =>
-                        setUserRankForm((prev) => ({ ...prev, position: parseInt(e.target.value) || 11 }))
-                      }
-                    />
-                  </div>
-                  <Button onClick={handleSetUserRank} disabled={!userRankForm.user_id || isUpdating}>
-                    Set Rank
-                  </Button>
-                </div>
-
-                {allUserRanks.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <h4 className="text-sm font-medium mb-2">Current User Ranks</h4>
-                    {allUserRanks.map((rank) => {
-                      const user = dropshippers?.find((u) => u.id === rank.user_id);
-                      return (
-                        <div key={rank.id} className="flex items-center gap-3 p-3 bg-card border rounded-lg">
-                          <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-muted">
-                            <Users className="w-5 h-5 text-muted-foreground" />
-                          </div>
-                          <div className="flex-1">
-                            <span className="font-medium">{user?.name || rank.user_id}</span>
-                          </div>
-                          <span className="text-sm px-3 py-1 rounded-full bg-muted text-muted-foreground">
-                            #{rank.admin_defined_position}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+      <CardContent className="space-y-3">
+        {sortedDropshippers.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Trophy className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">No dropshippers added yet</p>
+            <p className="text-xs mt-1">Click "Add Dropshipper" to get started</p>
+          </div>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={sortedDropshippers.map((d) => d.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {sortedDropshippers.map((entry) => (
+                <SortableDropshipperRow
+                  key={entry.id}
+                  entry={entry}
+                  onEdit={handleOpenDialog}
+                  onDelete={deleteDropshipper}
+                  onToggle={toggleActive}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        )}
       </CardContent>
     </Card>
   );

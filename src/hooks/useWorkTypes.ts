@@ -7,13 +7,12 @@ export interface WorkType {
   id: string;
   name: string;
   description: string | null;
-  category: string | null;
-  is_active: boolean;
-  is_default: boolean;
-  sort_order: number;
-  created_by: string | null;
+  category_id: string | null;
+  commission_amount: number | null;
+  is_active: boolean | null;
+  requires_proof: boolean | null;
+  sort_order: number | null;
   created_at: string;
-  updated_at: string;
 }
 
 // Fetch active work types (for users)
@@ -25,7 +24,6 @@ export function useActiveWorkTypes() {
         .from('work_types')
         .select('*')
         .eq('is_active', true)
-        .order('category', { ascending: true })
         .order('sort_order', { ascending: true });
 
       if (error) throw error;
@@ -44,7 +42,6 @@ export function useAllWorkTypes() {
       const { data, error } = await supabase
         .from('work_types')
         .select('*')
-        .order('category', { ascending: true })
         .order('sort_order', { ascending: true });
 
       if (error) throw error;
@@ -57,25 +54,23 @@ export function useAllWorkTypes() {
 // Create work type
 export function useCreateWorkType() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (data: { name: string; description?: string; category?: string }) => {
-      // Get the highest sort order
+    mutationFn: async (data: { name: string; description?: string; category_id?: string; commission_amount?: number }) => {
       const { data: existing } = await supabase
         .from('work_types')
         .select('sort_order')
         .order('sort_order', { ascending: false })
         .limit(1);
 
-      const nextOrder = existing && existing.length > 0 ? existing[0].sort_order + 1 : 1;
+      const nextOrder = existing && existing.length > 0 ? (existing[0].sort_order ?? 0) + 1 : 1;
 
       const { error } = await supabase.from('work_types').insert({
         name: data.name,
         description: data.description || null,
-        category: data.category || 'General',
+        category_id: data.category_id || null,
+        commission_amount: data.commission_amount || 0,
         sort_order: nextOrder,
-        created_by: user?.id,
       });
 
       if (error) throw error;
@@ -86,11 +81,7 @@ export function useCreateWorkType() {
       toast.success('Work type added successfully');
     },
     onError: (error: Error) => {
-      if (error.message.includes('unique')) {
-        toast.error('A work type with this name already exists');
-      } else {
-        toast.error('Failed to add work type: ' + error.message);
-      }
+      toast.error('Failed to add work type: ' + error.message);
     },
   });
 }
@@ -104,9 +95,10 @@ export function useUpdateWorkType() {
       id: string;
       name?: string;
       description?: string;
-      category?: string;
+      category_id?: string;
+      commission_amount?: number;
       is_active?: boolean;
-      is_default?: boolean;
+      requires_proof?: boolean;
       sort_order?: number;
     }) => {
       const { id, ...updateData } = data;
@@ -127,26 +119,18 @@ export function useUpdateWorkType() {
   });
 }
 
-// Set default work type
+// Placeholder for set default (not supported in current schema)
 export function useSetDefaultWorkType() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('work_types')
-        .update({ is_default: true })
-        .eq('id', id);
-
-      if (error) throw error;
+    mutationFn: async (_id: string) => {
+      // No-op: is_default column doesn't exist in current schema
+      console.log('Set default work type not supported in current schema');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['work-types-all'] });
       queryClient.invalidateQueries({ queryKey: ['work-types-active'] });
-      toast.success('Default work type updated');
-    },
-    onError: (error: Error) => {
-      toast.error('Failed to set default: ' + error.message);
     },
   });
 }
@@ -191,15 +175,4 @@ export function useReorderWorkTypes() {
       toast.error('Failed to reorder work types: ' + error.message);
     },
   });
-}
-
-// Get unique categories
-export function useWorkTypeCategories() {
-  const { data: workTypes } = useAllWorkTypes();
-  
-  const categories = workTypes 
-    ? [...new Set(workTypes.map(w => w.category || 'General'))].sort()
-    : ['General'];
-  
-  return categories;
 }

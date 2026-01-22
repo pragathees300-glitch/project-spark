@@ -34,7 +34,7 @@ export const useUserNotifications = () => {
         .from('order_status_history')
         .select(`
           id,
-          new_status,
+          status,
           created_at,
           order_id,
           orders!inner(
@@ -50,20 +50,20 @@ export const useUserNotifications = () => {
         .order('created_at', { ascending: false })
         .limit(20);
 
-      // Fetch recent crypto payment updates (last 24 hours)
+      // Fetch recent crypto payment updates (last 24 hours) - only select existing columns
       const { data: paymentUpdates } = await supabase
         .from('crypto_payments')
-        .select('id, status, amount, currency_symbol, wallet_name, updated_at, created_at')
+        .select('id, status, amount, created_at')
         .eq('user_id', user.id)
-        .in('status', ['verified', 'rejected'])
-        .gte('updated_at', twentyFourHoursAgo)
-        .order('updated_at', { ascending: false })
+        .in('status', ['confirmed', 'rejected'])
+        .gte('created_at', twentyFourHoursAgo)
+        .order('created_at', { ascending: false })
         .limit(20);
 
       // Fetch pending crypto payments (last 24 hours)
       const { data: pendingPayments } = await supabase
         .from('crypto_payments')
-        .select('id, status, amount, currency_symbol, wallet_name, created_at, updated_at')
+        .select('id, status, amount, created_at')
         .eq('user_id', user.id)
         .eq('status', 'pending')
         .gte('created_at', twentyFourHoursAgo)
@@ -84,8 +84,8 @@ export const useUserNotifications = () => {
         const productName = update.orders?.storefront_products?.products?.name || 'Product';
         const orderNumber = update.orders?.order_number || 'Order';
         
-        let statusLabel = update.new_status;
-        switch (update.new_status) {
+        let statusLabel = update.status;
+        switch (update.status) {
           case 'pending_payment':
             statusLabel = 'Pending Payment';
             break;
@@ -111,19 +111,19 @@ export const useUserNotifications = () => {
           created_at: update.created_at,
           is_read: true, // Order updates don't have read status
           reference_id: update.order_id,
-          status: update.new_status,
+          status: update.status,
         });
       });
 
       // Process payment updates (verified/rejected)
       paymentUpdates?.forEach(payment => {
-        const isVerified = payment.status === 'verified';
+        const isVerified = payment.status === 'confirmed';
         allNotifications.push({
           id: payment.id,
           type: 'payment_update',
           title: isVerified ? 'Payment Verified' : 'Payment Rejected',
-          description: `${payment.currency_symbol}${payment.amount.toFixed(2)} via ${payment.wallet_name}`,
-          created_at: payment.updated_at,
+          description: `$${payment.amount.toFixed(2)} crypto payment`,
+          created_at: payment.created_at,
           is_read: true,
           reference_id: payment.id,
           status: payment.status,
@@ -136,7 +136,7 @@ export const useUserNotifications = () => {
           id: `pending-${payment.id}`,
           type: 'payment_update',
           title: 'Payment Pending Verification',
-          description: `${payment.currency_symbol}${payment.amount.toFixed(2)} via ${payment.wallet_name}`,
+          description: `$${payment.amount.toFixed(2)} crypto payment`,
           created_at: payment.created_at,
           is_read: false,
           reference_id: payment.id,
@@ -147,9 +147,9 @@ export const useUserNotifications = () => {
       // Process in-app notifications (payouts, proofs, etc.)
       inAppNotifications?.forEach((notification: any) => {
         let notificationType: UserNotification['type'] = 'order_update';
-        if (notification.entity_type === 'payout') notificationType = 'payout_update';
-        else if (notification.entity_type === 'proof') notificationType = 'proof_update';
-        else if (notification.entity_type === 'order') notificationType = 'order_update';
+        if (notification.type === 'payout') notificationType = 'payout_update';
+        else if (notification.type === 'proof') notificationType = 'proof_update';
+        else if (notification.type === 'order') notificationType = 'order_update';
         
         allNotifications.push({
           id: notification.id,
@@ -157,8 +157,8 @@ export const useUserNotifications = () => {
           title: notification.title,
           description: notification.message,
           created_at: notification.created_at,
-          is_read: notification.is_read,
-          reference_id: notification.entity_id || notification.id,
+          is_read: notification.is_read ?? true,
+          reference_id: notification.action_url || notification.id,
           status: notification.type,
         });
       });

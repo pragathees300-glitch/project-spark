@@ -113,7 +113,7 @@ export const NotificationHistoryPanel: React.FC<NotificationHistoryPanelProps> =
             ) : (
               <div className="space-y-3 pr-4">
                 {messages.map((msg) => {
-                  const sender = getSenderLabel(msg.sender_type);
+                  const sender = getSenderLabel(msg.sender_role);
                   const SenderIcon = sender.icon;
 
                   return (
@@ -121,7 +121,7 @@ export const NotificationHistoryPanel: React.FC<NotificationHistoryPanelProps> =
                       key={msg.id}
                       className={cn(
                         'cursor-pointer transition-colors hover:bg-muted/50',
-                        !msg.is_read && msg.sender_type === 'user' && 'border-blue-500/50 bg-blue-500/5'
+                        !msg.is_read && msg.sender_role === 'user' && 'border-blue-500/50 bg-blue-500/5'
                       )}
                       onClick={() => onOpenChat?.(msg.order_id, msg.order_number)}
                     >
@@ -136,7 +136,7 @@ export const NotificationHistoryPanel: React.FC<NotificationHistoryPanelProps> =
                               {msg.order_number}
                             </Badge>
                           </div>
-                          {!msg.is_read && msg.sender_type === 'user' && (
+                          {!msg.is_read && msg.sender_role === 'user' && (
                             <Badge variant="destructive" className="text-[10px] px-1.5">
                               New
                             </Badge>

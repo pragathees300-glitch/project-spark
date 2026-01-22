@@ -99,10 +99,7 @@ export const AdminPostpaidSettings: React.FC<AdminPostpaidSettingsProps> = ({ cl
     toggleAllowPayoutWithDues,
     isTogglingAllowPayoutWithDues,
   } = useAdminPostpaid();
-
-  const { settingsMap } = usePlatformSettings();
-  const currencySymbol = CURRENCY_SYMBOLS[settingsMap.default_currency] || '$';
-
+  
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -111,6 +108,9 @@ export const AdminPostpaidSettings: React.FC<AdminPostpaidSettingsProps> = ({ cl
   const usersWithPostpaid = users.filter(u => u.postpaid_enabled);
   const usersWithDues = users.filter(u => u.postpaid_used > 0);
   const totalOutstandingDues = users.reduce((sum, u) => sum + u.postpaid_used, 0);
+
+  const { settingsMap } = usePlatformSettings();
+  const currencySymbol = CURRENCY_SYMBOLS[settingsMap.default_currency] || '$';
 
   const handleSendDueReminders = async () => {
     setIsSendingReminders(true);
@@ -613,7 +613,7 @@ export const AdminPostpaidSettings: React.FC<AdminPostpaidSettingsProps> = ({ cl
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">
-                        {tx.admin_reason || tx.description || '-'}
+                        {tx.description || '-'}
                       </TableCell>
                       <TableCell className={cn(
                         "text-right font-medium",

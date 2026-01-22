@@ -59,46 +59,47 @@ export const usePublicBrandingSettings = () => {
       };
 
       data?.forEach((setting) => {
+        const value = typeof setting.value === 'string' ? setting.value : String(setting.value ?? '');
         switch (setting.key) {
           case 'site_name':
-            settings.site_name = setting.value || settings.site_name;
+            settings.site_name = value || settings.site_name;
             break;
           case 'site_title':
-            settings.site_title = setting.value || settings.site_title;
+            settings.site_title = value || settings.site_title;
             break;
           case 'site_favicon_url':
-            settings.site_favicon_url = setting.value || '';
+            settings.site_favicon_url = value || '';
             break;
           case 'site_logo_url':
-            settings.site_logo_url = setting.value || '';
+            settings.site_logo_url = value || '';
             break;
           case 'landing_page_enabled':
-            settings.landing_page_enabled = setting.value !== 'false';
+            settings.landing_page_enabled = value !== 'false';
             break;
           case 'landing_page_title':
-            settings.landing_page_title = setting.value || settings.landing_page_title;
+            settings.landing_page_title = value || settings.landing_page_title;
             break;
           case 'landing_page_subtitle':
-            settings.landing_page_subtitle = setting.value || settings.landing_page_subtitle;
+            settings.landing_page_subtitle = value || settings.landing_page_subtitle;
             break;
           case 'landing_video_url':
-            settings.landing_video_url = setting.value || '';
+            settings.landing_video_url = value || '';
             break;
           case 'footer_text':
-            settings.footer_text = setting.value || settings.footer_text;
+            settings.footer_text = value || settings.footer_text;
             break;
           case 'faq_items':
             try {
-              settings.faq_items = JSON.parse(setting.value);
+              settings.faq_items = JSON.parse(value);
             } catch {
               // Keep default
             }
             break;
           case 'contact_email':
-            settings.contact_email = setting.value || '';
+            settings.contact_email = value || '';
             break;
           case 'contact_phone':
-            settings.contact_phone = setting.value || '';
+            settings.contact_phone = value || '';
             break;
         }
       });

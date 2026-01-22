@@ -1,17 +1,27 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Json } from '@/integrations/supabase/types';
 
 export interface SettingsAuditLog {
   id: string;
-  action_type: string;
+  action: string;
   entity_type: string;
-  admin_id: string | null;
-  old_value: Record<string, any> | null;
-  new_value: Record<string, any> | null;
-  reason: string | null;
+  entity_id: string | null;
+  user_id: string | null;
+  old_data: Record<string, unknown> | null;
+  new_data: Record<string, unknown> | null;
   created_at: string;
   admin_email?: string;
+}
+
+// Helper to safely parse Json to Record
+function parseJsonToRecord(data: Json | null): Record<string, unknown> | null {
+  if (!data) return null;
+  if (typeof data === 'object' && !Array.isArray(data)) {
+    return data as Record<string, unknown>;
+  }
+  return null;
 }
 
 export const useSettingsAuditLogs = (limit: number = 20) => {
@@ -33,7 +43,7 @@ export const useSettingsAuditLogs = (limit: number = 20) => {
       }
 
       // Fetch admin emails for display
-      const adminIds = [...new Set(data?.map(log => log.admin_id).filter(Boolean))];
+      const adminIds = [...new Set(data?.map(log => log.user_id).filter(Boolean))];
       let adminEmails: Record<string, string> = {};
       
       if (adminIds.length > 0) {
@@ -43,13 +53,20 @@ export const useSettingsAuditLogs = (limit: number = 20) => {
           .in('user_id', adminIds);
         
         profiles?.forEach(p => {
-          adminEmails[p.user_id] = p.email;
+          if (p.email) adminEmails[p.user_id] = p.email;
         });
       }
 
       return (data || []).map(log => ({
-        ...log,
-        admin_email: log.admin_id ? adminEmails[log.admin_id] : undefined,
+        id: log.id,
+        action: log.action,
+        entity_type: log.entity_type,
+        entity_id: log.entity_id,
+        user_id: log.user_id,
+        old_data: parseJsonToRecord(log.old_data),
+        new_data: parseJsonToRecord(log.new_data),
+        created_at: log.created_at,
+        admin_email: log.user_id ? adminEmails[log.user_id] : undefined,
       })) as SettingsAuditLog[];
     },
     enabled: user?.role === 'admin' && !!session,

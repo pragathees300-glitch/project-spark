@@ -69,27 +69,24 @@ const StarRating: React.FC<{
 };
 
 const ReviewCard: React.FC<{ review: ProductReview }> = ({ review }) => {
+  // Generate initials from user_id as fallback
+  const initials = review.user_id ? review.user_id.charAt(0).toUpperCase() : 'U';
+  
   return (
     <Card className="bg-gray-50 border-gray-100 rounded-2xl">
       <CardContent className="pt-6">
         <div className="flex items-start gap-4">
           <Avatar className="h-10 w-10">
             <AvatarFallback className="bg-gray-200 text-gray-700 font-semibold">
-              {review.customer_name.charAt(0).toUpperCase()}
+              {initials}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-gray-900">
-                  {review.customer_name}
+                  Verified Customer
                 </span>
-                {review.is_verified_purchase && (
-                  <Badge className="text-xs gap-1 bg-green-100 text-green-700 border-0">
-                    <CheckCircle2 className="w-3 h-3" />
-                    Verified
-                  </Badge>
-                )}
               </div>
               <span className="text-sm text-gray-500">
                 {format(new Date(review.created_at), 'MMM d, yyyy')}
@@ -136,9 +133,6 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
 
     submitReview({
       product_id: productId,
-      storefront_product_id: storefrontProductId,
-      customer_name: formData.customerName,
-      customer_email: formData.customerEmail,
       rating: formData.rating,
       review_text: formData.reviewText || undefined,
     });

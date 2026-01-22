@@ -87,20 +87,20 @@ export const useProducts = () => {
         id: sp.id,
         product_id: sp.product_id,
         user_id: sp.user_id,
-        selling_price: Number(sp.selling_price),
+        selling_price: Number(sp.custom_price) || Number(sp.products.base_price),
         custom_description: sp.custom_description,
-        is_active: sp.is_active,
+        is_active: sp.is_active || false,
         created_at: sp.created_at,
         product: {
           id: sp.products.id,
           name: sp.products.name,
           description: sp.products.description,
           base_price: Number(sp.products.base_price),
-          stock: sp.products.stock,
-          sku: sp.products.sku,
+          stock: sp.products.stock || 0,
+          sku: sp.products.sku || '',
           image_url: sp.products.image_url,
           category: sp.products.category,
-          is_active: sp.products.is_active,
+          is_active: sp.products.is_active || false,
           created_at: sp.products.created_at,
         },
       }));
@@ -126,7 +126,7 @@ export const useProducts = () => {
         .insert({
           product_id: productId,
           user_id: user.id,
-          selling_price: sellingPrice,
+          custom_price: sellingPrice,
           custom_description: customDescription || null,
           is_active: true,
         })
@@ -167,7 +167,7 @@ export const useProducts = () => {
       isActive?: boolean;
     }) => {
       const updates: Record<string, unknown> = {};
-      if (sellingPrice !== undefined) updates.selling_price = sellingPrice;
+      if (sellingPrice !== undefined) updates.custom_price = sellingPrice;
       if (customDescription !== undefined) updates.custom_description = customDescription;
       if (isActive !== undefined) updates.is_active = isActive;
 

@@ -89,53 +89,54 @@ export const usePublicSettings = () => {
       };
 
       data?.forEach((setting) => {
+        const value = typeof setting.value === 'string' ? setting.value : String(setting.value ?? '');
         switch (setting.key) {
           case 'storefront_greeting_message':
-            settings.storefront_greeting_message = setting.value || settings.storefront_greeting_message;
+            settings.storefront_greeting_message = value || settings.storefront_greeting_message;
             break;
           case 'storefront_ordering_enabled':
-            settings.storefront_ordering_enabled = setting.value !== 'false';
+            settings.storefront_ordering_enabled = value !== 'false';
             break;
           case 'storefront_ordering_disabled_message':
-            settings.storefront_ordering_disabled_message = setting.value || settings.storefront_ordering_disabled_message;
+            settings.storefront_ordering_disabled_message = value || settings.storefront_ordering_disabled_message;
             break;
           case 'payout_enabled':
-            settings.payout_enabled = setting.value !== 'false';
+            settings.payout_enabled = value !== 'false';
             break;
           case 'payout_disabled_message':
-            settings.payout_disabled_message = setting.value || settings.payout_disabled_message;
+            settings.payout_disabled_message = value || settings.payout_disabled_message;
             break;
           case 'chat_greeting_message':
-            settings.chat_greeting_message = setting.value || settings.chat_greeting_message;
+            settings.chat_greeting_message = value || settings.chat_greeting_message;
             break;
           case 'payout_methods_enabled':
             try {
-              settings.payout_methods_enabled = JSON.parse(setting.value);
+              settings.payout_methods_enabled = JSON.parse(value);
             } catch {
               // Keep default
             }
             break;
           case 'storefront_payment_icons':
             try {
-              settings.storefront_payment_icons = JSON.parse(setting.value);
+              settings.storefront_payment_icons = JSON.parse(value);
             } catch {
               // Keep default
             }
             break;
           case 'storefront_contact_email':
-            settings.storefront_contact_email = setting.value || settings.storefront_contact_email;
+            settings.storefront_contact_email = value || settings.storefront_contact_email;
             break;
           case 'storefront_contact_phone':
-            settings.storefront_contact_phone = setting.value || settings.storefront_contact_phone;
+            settings.storefront_contact_phone = value || settings.storefront_contact_phone;
             break;
           case 'storefront_contact_address':
-            settings.storefront_contact_address = setting.value || settings.storefront_contact_address;
+            settings.storefront_contact_address = value || settings.storefront_contact_address;
             break;
           case 'storefront_contact_whatsapp':
-            settings.storefront_contact_whatsapp = setting.value || settings.storefront_contact_whatsapp;
+            settings.storefront_contact_whatsapp = value || settings.storefront_contact_whatsapp;
             break;
           case 'storefront_business_hours':
-            settings.storefront_business_hours = setting.value || settings.storefront_business_hours;
+            settings.storefront_business_hours = value || settings.storefront_business_hours;
             break;
         }
       });

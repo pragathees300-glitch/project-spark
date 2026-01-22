@@ -1,9 +1,8 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Trophy, Medal, Award, Crown, Package, IndianRupee } from 'lucide-react';
+import { Trophy, Medal, Award, Crown, IndianRupee } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTopDropshippers } from '@/hooks/useTopDropshippers';
@@ -16,7 +15,7 @@ const rankIcons: Record<number, React.ReactNode> = {
 
 export const AdminManagedLeaderboard: React.FC = () => {
   const { user } = useAuth();
-  const { topDropshippers, userRank, isUserInTop10, isLoading } = useTopDropshippers();
+  const { topDropshippers, isLoading } = useTopDropshippers();
 
   if (isLoading) {
     return (
@@ -66,109 +65,41 @@ export const AdminManagedLeaderboard: React.FC = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {/* Top 10 Entries */}
-        {topDropshippers.map((entry) => {
-          const isCurrentUser = entry.user_id === user?.id;
+        {topDropshippers.map((entry, index) => {
+          const rankPosition = entry.sort_order ?? entry.rank ?? index + 1;
           return (
             <div
               key={entry.id}
-              className={cn(
-                'flex items-center gap-3 p-2 rounded-lg transition-colors',
-                isCurrentUser
-                  ? 'bg-primary/10 border border-primary/20'
-                  : 'hover:bg-muted/50'
-              )}
+              className="flex items-center gap-3 p-2 rounded-lg transition-colors hover:bg-muted/50"
             >
-              {/* Rank */}
               <div className="w-8 flex justify-center">
-                {rankIcons[entry.rank_position] || (
+                {rankIcons[rankPosition] || (
                   <span className="text-sm font-medium text-muted-foreground">
-                    #{entry.rank_position}
+                    #{rankPosition}
                   </span>
                 )}
               </div>
 
-              {/* Avatar */}
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="text-xs bg-muted">
                   {entry.display_name.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
 
-              {/* Name and Stats */}
               <div className="flex-1 min-w-0">
-                <p
-                  className={cn(
-                    'text-sm font-medium truncate',
-                    isCurrentUser && 'text-primary'
-                  )}
-                >
+                <p className="text-sm font-medium truncate">
                   {entry.display_name}
-                  {isCurrentUser && (
-                    <span className="text-xs text-muted-foreground ml-1">(You)</span>
-                  )}
                 </p>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  {(entry.orders_count > 0 || entry.earnings_amount > 0) && (
-                    <>
-                      <span className="flex items-center gap-1">
-                        <Package className="w-3 h-3" />
-                        {entry.orders_count || 0}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <IndianRupee className="w-3 h-3" />
-                        {(entry.earnings_amount || 0).toLocaleString()}
-                      </span>
-                    </>
-                  )}
-                </div>
+                {(entry.earnings ?? 0) > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <IndianRupee className="w-3 h-3" />
+                    {(entry.earnings ?? 0).toLocaleString()}
+                  </div>
+                )}
               </div>
-
-              {/* Badge */}
-              {entry.badge_title && (
-                <Badge className="gap-1 text-xs border bg-gradient-to-r from-amber-200 to-amber-300 text-amber-800 border-amber-400">
-                  <Award className="w-3 h-3" />
-                  {entry.badge_title}
-                </Badge>
-              )}
             </div>
           );
         })}
-
-        {/* Current User Position (11th entry) - Only show if not in Top 10 */}
-        {user && !isUserInTop10 && (
-          <>
-            <div className="border-t border-dashed my-2" />
-            <div className="flex items-center gap-3 p-2 rounded-lg bg-primary/10 border border-primary/20">
-              {/* Rank */}
-              <div className="w-8 flex justify-center">
-                <span className="text-sm font-medium text-muted-foreground">
-                  #{userRank?.admin_defined_position || 11}
-                </span>
-              </div>
-
-              {/* Avatar */}
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="text-xs bg-muted">
-                  {user.name?.charAt(0).toUpperCase() || 'U'}
-                </AvatarFallback>
-              </Avatar>
-
-              {/* Name */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate text-primary">
-                  {user.name}
-                  <span className="text-xs text-muted-foreground ml-1">(You)</span>
-                </p>
-              </div>
-
-              {/* Your Position Label */}
-              <Badge variant="outline" className="text-xs">
-                Your Position
-              </Badge>
-            </div>
-          </>
-        )}
       </CardContent>
     </Card>
   );

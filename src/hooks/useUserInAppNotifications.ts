@@ -6,12 +6,11 @@ import { useEffect } from 'react';
 export interface UserNotification {
   id: string;
   user_id: string;
-  type: string;
+  type: string | null;
   title: string;
   message: string;
-  entity_type: string | null;
-  entity_id: string | null;
-  is_read: boolean;
+  action_url: string | null;
+  is_read: boolean | null;
   created_at: string;
 }
 
@@ -150,13 +149,14 @@ export function useUserInAppNotifications() {
 }
 
 // Helper function to create a notification (used in hooks)
+// Updated signature to match callers that pass entityType and entityId
 export async function createUserNotification(
   userId: string,
   type: string,
   title: string,
   message: string,
-  entityType?: string,
-  entityId?: string
+  _entityType?: string, // Not stored in DB but accepted for compatibility
+  _entityId?: string    // Not stored in DB but accepted for compatibility
 ) {
   try {
     const { error } = await supabase.from('user_notifications').insert({
@@ -164,8 +164,7 @@ export async function createUserNotification(
       type,
       title,
       message,
-      entity_type: entityType || null,
-      entity_id: entityId || null,
+      action_url: _entityId ? `/${_entityType}/${_entityId}` : null,
     });
 
     if (error) {

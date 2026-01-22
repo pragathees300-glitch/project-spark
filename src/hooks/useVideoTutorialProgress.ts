@@ -6,8 +6,10 @@ import { useToast } from '@/hooks/use-toast';
 export interface TutorialCompletion {
   id: string;
   user_id: string;
-  tutorial_id: string;
-  watched_at: string;
+  video_id: string;
+  is_completed: boolean | null;
+  watched_seconds: number | null;
+  completed_at: string | null;
   created_at: string;
 }
 
@@ -22,7 +24,7 @@ export const useVideoTutorialProgress = () => {
       if (!user?.id) return [];
       
       const { data, error } = await supabase
-        .from('video_tutorial_completions')
+        .from('video_tutorial_progress')
         .select('*')
         .eq('user_id', user.id);
 
@@ -37,17 +39,18 @@ export const useVideoTutorialProgress = () => {
   });
 
   const markAsWatchedMutation = useMutation({
-    mutationFn: async (tutorialId: string) => {
+    mutationFn: async (videoId: string) => {
       if (!user?.id) throw new Error('User not authenticated');
 
       const { data, error } = await supabase
-        .from('video_tutorial_completions')
+        .from('video_tutorial_progress')
         .upsert({
           user_id: user.id,
-          tutorial_id: tutorialId,
-          watched_at: new Date().toISOString(),
+          video_id: videoId,
+          is_completed: true,
+          completed_at: new Date().toISOString(),
         }, {
-          onConflict: 'user_id,tutorial_id',
+          onConflict: 'user_id,video_id',
         })
         .select()
         .single();
@@ -73,14 +76,14 @@ export const useVideoTutorialProgress = () => {
   });
 
   const unmarkAsWatchedMutation = useMutation({
-    mutationFn: async (tutorialId: string) => {
+    mutationFn: async (videoId: string) => {
       if (!user?.id) throw new Error('User not authenticated');
 
       const { error } = await supabase
-        .from('video_tutorial_completions')
+        .from('video_tutorial_progress')
         .delete()
         .eq('user_id', user.id)
-        .eq('tutorial_id', tutorialId);
+        .eq('video_id', videoId);
 
       if (error) throw error;
     },
@@ -92,11 +95,11 @@ export const useVideoTutorialProgress = () => {
     },
   });
 
-  const isTutorialWatched = (tutorialId: string) => {
-    return completions.some((c) => c.tutorial_id === tutorialId);
+  const isTutorialWatched = (videoId: string) => {
+    return completions.some((c) => c.video_id === videoId && c.is_completed);
   };
 
-  const watchedCount = completions.length;
+  const watchedCount = completions.filter(c => c.is_completed).length;
 
   const getProgress = (totalTutorials: number) => {
     if (totalTutorials === 0) return 0;

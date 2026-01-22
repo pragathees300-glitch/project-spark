@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export interface CustomThemeColors {
   primary: string;
@@ -13,85 +11,37 @@ export interface CustomThemeColors {
   sidebar: string;
 }
 
+// Store theme preference in localStorage since user_preferences table doesn't exist
+const THEME_STORAGE_KEY = 'user-theme-preference';
+
 export function useThemePreference() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { user } = useAuth();
-  const queryClient = useQueryClient();
   const [isInitialized, setIsInitialized] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Fetch user's theme preference from database
-  const { data: preferences, isLoading } = useQuery({
-    queryKey: ['user-preferences', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching preferences:', error);
-        return null;
-      }
-      
-      return data;
-    },
-    enabled: !!user?.id,
-  });
-
-  // Save theme preference mutation
-  const saveThemeMutation = useMutation({
-    mutationFn: async (newTheme: string) => {
-      if (!user?.id) return;
-
-      const { data: existing } = await supabase
-        .from('user_preferences')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (existing) {
-        const { error } = await supabase
-          .from('user_preferences')
-          .update({ theme: newTheme, updated_at: new Date().toISOString() })
-          .eq('user_id', user.id);
-        
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('user_preferences')
-          .insert({ user_id: user.id, theme: newTheme });
-        
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-preferences', user?.id] });
-    },
-  });
-
-  // Apply theme from database on initial load
+  // Load theme from localStorage on mount
   useEffect(() => {
-    if (preferences?.theme && !isInitialized) {
-      setTheme(preferences.theme);
+    if (!isInitialized) {
+      const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+      if (storedTheme) {
+        setTheme(storedTheme);
+      }
       setIsInitialized(true);
-    } else if (!isLoading && !preferences && !isInitialized) {
-      // No preferences stored, use default 'light'
-      setIsInitialized(true);
+      setIsLoading(false);
     }
-  }, [preferences, isLoading, isInitialized, setTheme]);
+  }, [isInitialized, setTheme]);
 
-  // Custom setTheme that also saves to database
+  // Custom setTheme that also saves to localStorage
   const setThemeWithPersistence = useCallback((newTheme: string) => {
     setTheme(newTheme);
     setPreviewTheme(null);
-    if (user?.id) {
-      saveThemeMutation.mutate(newTheme);
-    }
-  }, [setTheme, user?.id, saveThemeMutation]);
+    setIsSaving(true);
+    localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+    setIsSaving(false);
+  }, [setTheme]);
 
   // Preview a theme temporarily without saving
   const startPreview = useCallback((themeToPreview: string) => {
@@ -123,7 +73,7 @@ export function useThemePreference() {
     resolvedTheme,
     setTheme: setThemeWithPersistence,
     isLoading: isLoading && !isInitialized,
-    isSaving: saveThemeMutation.isPending,
+    isSaving,
     // Preview functionality
     isPreviewActive: !!previewTheme,
     previewTheme,

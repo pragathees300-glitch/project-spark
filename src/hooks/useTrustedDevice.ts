@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 const DEVICE_TOKEN_KEY = 'dropship_device_token';
 
-// Generate a unique device token
-const generateDeviceToken = (): string => {
+// Generate a unique device fingerprint
+const generateDeviceFingerprint = (): string => {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
@@ -40,6 +40,7 @@ export const useTrustedDevice = () => {
       
       if (!storedToken) {
         setIsTrustedDevice(false);
+        setIsChecking(false);
         return false;
       }
 
@@ -47,14 +48,15 @@ export const useTrustedDevice = () => {
         .from('trusted_devices')
         .select('id, expires_at')
         .eq('user_id', userId)
-        .eq('device_token', storedToken)
+        .eq('device_fingerprint', storedToken)
         .gt('expires_at', new Date().toISOString())
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         // Token expired or not found, clean up
         localStorage.removeItem(DEVICE_TOKEN_KEY);
         setIsTrustedDevice(false);
+        setIsChecking(false);
         return false;
       }
 
@@ -65,29 +67,28 @@ export const useTrustedDevice = () => {
         .eq('id', data.id);
 
       setIsTrustedDevice(true);
+      setIsChecking(false);
       return true;
     } catch (error) {
       console.error('Error checking trusted device:', error);
       setIsTrustedDevice(false);
-      return false;
-    } finally {
       setIsChecking(false);
+      return false;
     }
   }, []);
 
   // Trust the current device for 30 days
   const trustDevice = useCallback(async (userId: string): Promise<boolean> => {
     try {
-      const deviceToken = generateDeviceToken();
+      const deviceFingerprint = generateDeviceFingerprint();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
       const { error } = await supabase
         .from('trusted_devices')
         .insert({
           user_id: userId,
-          device_token: deviceToken,
+          device_fingerprint: deviceFingerprint,
           device_name: getDeviceName(),
-          user_agent: navigator.userAgent,
           expires_at: expiresAt.toISOString(),
         });
 
@@ -96,7 +97,7 @@ export const useTrustedDevice = () => {
         return false;
       }
 
-      localStorage.setItem(DEVICE_TOKEN_KEY, deviceToken);
+      localStorage.setItem(DEVICE_TOKEN_KEY, deviceFingerprint);
       setIsTrustedDevice(true);
       return true;
     } catch (error) {
@@ -115,7 +116,7 @@ export const useTrustedDevice = () => {
           .from('trusted_devices')
           .delete()
           .eq('user_id', userId)
-          .eq('device_token', storedToken);
+          .eq('device_fingerprint', storedToken);
       }
 
       localStorage.removeItem(DEVICE_TOKEN_KEY);

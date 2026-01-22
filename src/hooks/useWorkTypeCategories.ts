@@ -6,12 +6,10 @@ import { toast } from 'sonner';
 export interface WorkTypeCategory {
   id: string;
   name: string;
-  color: string;
-  icon: string | null;
-  sort_order: number;
-  is_active: boolean;
+  description: string | null;
+  sort_order: number | null;
+  is_active: boolean | null;
   created_at: string;
-  updated_at: string;
 }
 
 // Fetch active categories (for users)
@@ -55,19 +53,18 @@ export function useCreateCategory() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: { name: string; color: string; icon?: string }) => {
+    mutationFn: async (data: { name: string; description?: string }) => {
       const { data: existing } = await supabase
         .from('work_type_categories')
         .select('sort_order')
         .order('sort_order', { ascending: false })
         .limit(1);
 
-      const nextOrder = existing && existing.length > 0 ? existing[0].sort_order + 1 : 1;
+      const nextOrder = existing && existing.length > 0 ? (existing[0].sort_order ?? 0) + 1 : 1;
 
       const { error } = await supabase.from('work_type_categories').insert({
         name: data.name,
-        color: data.color,
-        icon: data.icon || 'folder',
+        description: data.description || null,
         sort_order: nextOrder,
       });
 
@@ -79,11 +76,7 @@ export function useCreateCategory() {
       toast.success('Category added successfully');
     },
     onError: (error: Error) => {
-      if (error.message.includes('unique')) {
-        toast.error('A category with this name already exists');
-      } else {
-        toast.error('Failed to add category: ' + error.message);
-      }
+      toast.error('Failed to add category: ' + error.message);
     },
   });
 }
@@ -96,8 +89,7 @@ export function useUpdateCategory() {
     mutationFn: async (data: {
       id: string;
       name?: string;
-      color?: string;
-      icon?: string;
+      description?: string;
       is_active?: boolean;
       sort_order?: number;
     }) => {
@@ -161,13 +153,18 @@ export function useReorderCategories() {
   });
 }
 
-// Get category color map for quick lookup
+// Category color map helper (returns default colors since table doesn't have color column)
 export function useCategoryColorMap() {
   const { data: categories } = useActiveCategories();
   
   const colorMap = new Map<string, { color: string; icon: string }>();
-  categories?.forEach((cat) => {
-    colorMap.set(cat.name, { color: cat.color, icon: cat.icon || 'folder' });
+  const defaultColors = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6'];
+  
+  categories?.forEach((cat, index) => {
+    colorMap.set(cat.id, { 
+      color: defaultColors[index % defaultColors.length], 
+      icon: 'folder' 
+    });
   });
   
   return colorMap;

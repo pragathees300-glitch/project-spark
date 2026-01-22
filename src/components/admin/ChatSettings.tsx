@@ -34,13 +34,13 @@ export const ChatSettings: React.FC = () => {
 
         data?.forEach((setting) => {
           if (setting.key === 'chat_welcome_message' && setting.value) {
-            setWelcomeMessage(setting.value);
+            setWelcomeMessage(String(setting.value));
           }
           if (setting.key === 'chat_greeting_message' && setting.value) {
-            setGreetingMessage(setting.value);
+            setGreetingMessage(String(setting.value));
           }
           if (setting.key === 'chat_end_message' && setting.value) {
-            setEndMessage(setting.value);
+            setEndMessage(String(setting.value));
           }
         });
       } catch (error) {

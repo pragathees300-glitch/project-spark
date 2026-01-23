@@ -66,18 +66,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
 
-      // Fetch user role
-      const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (roleError) {
-        console.error('Error fetching role:', roleError);
+      // Fetch user role - try multiple times if needed
+      let roleData = null;
+      let roleError = null;
+      
+      // Attempt to fetch role with retry for newly created users
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const result = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        roleData = result.data;
+        roleError = result.error;
+        
+        if (roleData || !roleError) break;
+        
+        // Wait briefly before retry
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
 
-      const role: UserRole = (roleData?.role as UserRole) || 'user';
+      if (roleError) {
+        console.error('Error fetching role after retries:', roleError);
+      }
+
+      // Safely extract role, defaulting to 'user' only if no data exists
+      const role: UserRole = (roleData?.role === 'admin' || roleData?.role === 'user') 
+        ? roleData.role 
+        : 'user';
+      
+      console.log('User role fetched:', { userId, role, roleData });
 
       return {
         id: userId,

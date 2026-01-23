@@ -280,9 +280,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data.user) {
+        // Attempt to reconcile profile/roles if missing (handles edge case where auth user exists but profile is missing)
+        try {
+          await supabase.rpc('reconcile_profile_and_roles_by_email');
+        } catch (reconcileErr: any) {
+          console.warn('Profile reconcile failed (non-fatal):', reconcileErr?.message);
+        }
+
         const userProfile = await fetchUserProfile(data.user.id);
 
-        // If the auth account exists but the profile is missing (e.g. deleted), block access.
+        // If the auth account exists but the profile is still missing after reconcile, block access.
         if (!userProfile) {
           await supabase.auth.signOut();
           return { success: false, error: 'Account not found. Please contact admin.' };

@@ -16,18 +16,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Loader2, Image as ImageIcon, FolderOpen } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubmitProof, uploadProofImages } from '@/hooks/useProofOfWork';
 import { useActiveWorkTypes } from '@/hooks/useWorkTypes';
 import { useActiveCategories } from '@/hooks/useWorkTypeCategories';
-import { getIconComponent } from '@/components/admin/WorkTypeCategorySettings';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const MAX_FILES = 5;
 const MAX_SIZE_MB = 5;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+// Default colors for categories
+const DEFAULT_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6'];
 
 const formSchema = z.object({
   work_title: z.string().min(1, 'Please select a work type'),
@@ -51,14 +53,14 @@ export const SubmitProofForm: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   
-  // Build category color map
-  const categoryColorMap = new Map<string, { color: string; icon: string }>();
-  categories?.forEach((cat) => {
-    categoryColorMap.set(cat.name, { color: cat.color, icon: cat.icon || 'folder' });
+  // Build category map with colors
+  const categoryMap = new Map<string, { name: string; color: string }>();
+  categories?.forEach((cat, index) => {
+    categoryMap.set(cat.id, {
+      name: cat.name,
+      color: DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+    });
   });
-
-  // Find default work type
-  const defaultWorkType = workTypes?.find(wt => wt.is_default);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -70,14 +72,6 @@ export const SubmitProofForm: React.FC = () => {
       confirmation: false,
     },
   });
-
-  // Set default work type when data loads
-  React.useEffect(() => {
-    if (defaultWorkType && !form.getValues('work_title')) {
-      form.setValue('work_title', defaultWorkType.name);
-      form.setValue('work_type', defaultWorkType.name);
-    }
-  }, [defaultWorkType, form]);
 
   const handleFiles = useCallback((newFiles: FileList | File[]) => {
     const fileArray = Array.from(newFiles);
@@ -170,6 +164,14 @@ export const SubmitProofForm: React.FC = () => {
 
   const isSubmitting = uploading || submitProof.isPending;
 
+  // Group work types by category_id
+  const groupedWorkTypes = workTypes?.reduce((acc, wt) => {
+    const catId = wt.category_id || 'uncategorized';
+    if (!acc[catId]) acc[catId] = [];
+    acc[catId].push(wt);
+    return acc;
+  }, {} as Record<string, typeof workTypes>) || {};
+
   return (
     <Card>
       <CardHeader>
@@ -190,63 +192,50 @@ export const SubmitProofForm: React.FC = () => {
                   {isLoadingWorkTypes ? (
                     <Skeleton className="h-10 w-full" />
                   ) : workTypes && workTypes.length > 0 ? (
-                    (() => {
-                      // Group work types by category
-                      const grouped = workTypes.reduce((acc, wt) => {
-                        const cat = wt.category || 'General';
-                        if (!acc[cat]) acc[cat] = [];
-                        acc[cat].push(wt);
-                        return acc;
-                      }, {} as Record<string, typeof workTypes>);
-                      const catKeys = Object.keys(grouped).sort();
-
-                      return (
-                        <Select
-                          onValueChange={(val) => {
-                            field.onChange(val);
-                            form.setValue('work_type', val);
-                          }}
-                          value={field.value}
-                          disabled={isSubmitting}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a work type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {catKeys.map((category) => {
-                              const catInfo = categoryColorMap.get(category);
-                              const color = catInfo?.color || '#6366f1';
-                              const IconComponent = getIconComponent(catInfo?.icon || null);
-                              
-                              return (
-                                <div key={category}>
-                                  <div 
-                                    className="px-2 py-1.5 text-xs font-semibold flex items-center gap-2"
-                                    style={{ backgroundColor: `${color}10` }}
-                                  >
-                                    <IconComponent className="w-3.5 h-3.5" style={{ color }} />
-                                    <span style={{ color }}>{category}</span>
-                                  </div>
-                                  {grouped[category].map((type) => (
-                                    <SelectItem key={type.id} value={type.name} className="pl-6">
-                                      <span className="flex items-center gap-2">
-                                        <span 
-                                          className="w-2 h-2 rounded-full shrink-0" 
-                                          style={{ backgroundColor: color }}
-                                        />
-                                        {type.name}
-                                      </span>
-                                    </SelectItem>
-                                  ))}
-                                </div>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
-                      );
-                    })()
+                    <Select
+                      onValueChange={(val) => {
+                        field.onChange(val);
+                        form.setValue('work_type', val);
+                      }}
+                      value={field.value}
+                      disabled={isSubmitting}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a work type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.entries(groupedWorkTypes).map(([catId, types]) => {
+                          const catInfo = categoryMap.get(catId);
+                          const categoryName = catInfo?.name || (catId === 'uncategorized' ? 'General' : catId);
+                          const color = catInfo?.color || '#6366f1';
+                          
+                          return (
+                            <div key={catId}>
+                              <div 
+                                className="px-2 py-1.5 text-xs font-semibold flex items-center gap-2"
+                                style={{ backgroundColor: `${color}10` }}
+                              >
+                                <FolderOpen className="w-3.5 h-3.5" style={{ color }} />
+                                <span style={{ color }}>{categoryName}</span>
+                              </div>
+                              {types?.map((type) => (
+                                <SelectItem key={type.id} value={type.name} className="pl-6">
+                                  <span className="flex items-center gap-2">
+                                    <span 
+                                      className="w-2 h-2 rounded-full shrink-0" 
+                                      style={{ backgroundColor: color }}
+                                    />
+                                    {type.name}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <div className="p-3 rounded-md bg-muted text-sm text-muted-foreground">
                       No work types available. Please contact admin.

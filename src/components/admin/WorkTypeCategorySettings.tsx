@@ -4,15 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -37,21 +29,6 @@ import {
   Trash2,
   GripVertical,
   FolderOpen,
-  Share2,
-  FileText,
-  Megaphone,
-  ShoppingCart,
-  MoreHorizontal,
-  Image,
-  Video,
-  Users,
-  Star,
-  Heart,
-  Zap,
-  Target,
-  Globe,
-  Mail,
-  Phone,
   Palette,
 } from 'lucide-react';
 import {
@@ -80,47 +57,22 @@ import {
   WorkTypeCategory,
 } from '@/hooks/useWorkTypeCategories';
 
-const ICON_OPTIONS = [
-  { value: 'folder', label: 'Folder', icon: FolderOpen },
-  { value: 'share-2', label: 'Share', icon: Share2 },
-  { value: 'file-text', label: 'Document', icon: FileText },
-  { value: 'megaphone', label: 'Megaphone', icon: Megaphone },
-  { value: 'shopping-cart', label: 'Shopping', icon: ShoppingCart },
-  { value: 'more-horizontal', label: 'More', icon: MoreHorizontal },
-  { value: 'image', label: 'Image', icon: Image },
-  { value: 'video', label: 'Video', icon: Video },
-  { value: 'users', label: 'Users', icon: Users },
-  { value: 'star', label: 'Star', icon: Star },
-  { value: 'heart', label: 'Heart', icon: Heart },
-  { value: 'zap', label: 'Zap', icon: Zap },
-  { value: 'target', label: 'Target', icon: Target },
-  { value: 'globe', label: 'Globe', icon: Globe },
-  { value: 'mail', label: 'Mail', icon: Mail },
-  { value: 'phone', label: 'Phone', icon: Phone },
-];
+// Default colors for categories (used for UI display only, not stored in DB)
+const DEFAULT_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#14b8a6'];
 
-const COLOR_OPTIONS = [
-  { value: '#6366f1', label: 'Indigo' },
-  { value: '#ec4899', label: 'Pink' },
-  { value: '#f59e0b', label: 'Amber' },
-  { value: '#10b981', label: 'Emerald' },
-  { value: '#3b82f6', label: 'Blue' },
-  { value: '#8b5cf6', label: 'Violet' },
-  { value: '#ef4444', label: 'Red' },
-  { value: '#14b8a6', label: 'Teal' },
-  { value: '#f97316', label: 'Orange' },
-  { value: '#6b7280', label: 'Gray' },
-  { value: '#84cc16', label: 'Lime' },
-  { value: '#06b6d4', label: 'Cyan' },
-];
+export const getIconComponent = (_iconName: string | null) => {
+  // Database doesn't have icon column, return default
+  return FolderOpen;
+};
 
-export const getIconComponent = (iconName: string | null) => {
-  const found = ICON_OPTIONS.find((i) => i.value === iconName);
-  return found?.icon || FolderOpen;
+// Get a consistent color for a category based on its index
+const getCategoryColor = (index: number) => {
+  return DEFAULT_COLORS[index % DEFAULT_COLORS.length];
 };
 
 interface SortableCategoryRowProps {
   category: WorkTypeCategory;
+  index: number;
   onEdit: (cat: WorkTypeCategory) => void;
   onDelete: (cat: WorkTypeCategory) => void;
   onToggle: (cat: WorkTypeCategory) => void;
@@ -128,6 +80,7 @@ interface SortableCategoryRowProps {
 
 const SortableCategoryRow: React.FC<SortableCategoryRowProps> = ({
   category,
+  index,
   onEdit,
   onDelete,
   onToggle,
@@ -142,7 +95,7 @@ const SortableCategoryRow: React.FC<SortableCategoryRowProps> = ({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const IconComponent = getIconComponent(category.icon);
+  const color = getCategoryColor(index);
 
   return (
     <div
@@ -160,9 +113,9 @@ const SortableCategoryRow: React.FC<SortableCategoryRowProps> = ({
 
       <div
         className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-        style={{ backgroundColor: `${category.color}20` }}
+        style={{ backgroundColor: `${color}20` }}
       >
-        <IconComponent className="w-4 h-4" style={{ color: category.color }} />
+        <FolderOpen className="w-4 h-4" style={{ color }} />
       </div>
 
       <div className="flex-1 min-w-0">
@@ -170,12 +123,15 @@ const SortableCategoryRow: React.FC<SortableCategoryRowProps> = ({
           <span className="font-medium truncate">{category.name}</span>
           <div
             className="w-3 h-3 rounded-full shrink-0"
-            style={{ backgroundColor: category.color }}
+            style={{ backgroundColor: color }}
           />
         </div>
+        {category.description && (
+          <p className="text-xs text-muted-foreground truncate">{category.description}</p>
+        )}
       </div>
 
-      <Switch checked={category.is_active} onCheckedChange={() => onToggle(category)} />
+      <Switch checked={category.is_active ?? true} onCheckedChange={() => onToggle(category)} />
 
       <div className="flex items-center gap-1 shrink-0">
         <Button variant="ghost" size="icon" onClick={() => onEdit(category)}>
@@ -206,7 +162,7 @@ export const WorkTypeCategorySettings: React.FC = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<WorkTypeCategory | null>(null);
-  const [formData, setFormData] = useState({ name: '', color: '#6366f1', icon: 'folder' });
+  const [formData, setFormData] = useState({ name: '', description: '' });
 
   useEffect(() => {
     if (categories) {
@@ -235,7 +191,7 @@ export const WorkTypeCategorySettings: React.FC = () => {
   };
 
   const handleAdd = () => {
-    setFormData({ name: '', color: '#6366f1', icon: 'folder' });
+    setFormData({ name: '', description: '' });
     setIsAddDialogOpen(true);
   };
 
@@ -243,8 +199,7 @@ export const WorkTypeCategorySettings: React.FC = () => {
     setSelectedCategory(category);
     setFormData({
       name: category.name,
-      color: category.color,
-      icon: category.icon || 'folder',
+      description: category.description || '',
     });
     setIsEditDialogOpen(true);
   };
@@ -257,7 +212,7 @@ export const WorkTypeCategorySettings: React.FC = () => {
   const handleToggleActive = async (category: WorkTypeCategory) => {
     await updateCategory.mutateAsync({
       id: category.id,
-      is_active: !category.is_active,
+      is_active: !(category.is_active ?? true),
     });
   };
 
@@ -265,8 +220,7 @@ export const WorkTypeCategorySettings: React.FC = () => {
     if (!formData.name.trim()) return;
     await createCategory.mutateAsync({
       name: formData.name.trim(),
-      color: formData.color,
-      icon: formData.icon,
+      description: formData.description.trim() || undefined,
     });
     setIsAddDialogOpen(false);
   };
@@ -276,8 +230,7 @@ export const WorkTypeCategorySettings: React.FC = () => {
     await updateCategory.mutateAsync({
       id: selectedCategory.id,
       name: formData.name.trim(),
-      color: formData.color,
-      icon: formData.icon,
+      description: formData.description.trim() || undefined,
     });
     setIsEditDialogOpen(false);
   };
@@ -288,8 +241,6 @@ export const WorkTypeCategorySettings: React.FC = () => {
     setIsDeleteDialogOpen(false);
   };
 
-  const SelectedIcon = getIconComponent(formData.icon);
-
   return (
     <Card>
       <CardHeader>
@@ -299,7 +250,7 @@ export const WorkTypeCategorySettings: React.FC = () => {
             <div>
               <CardTitle className="text-base">Work Type Categories</CardTitle>
               <CardDescription>
-                Manage categories with custom colors and icons
+                Organize work types into categories
               </CardDescription>
             </div>
           </div>
@@ -326,10 +277,11 @@ export const WorkTypeCategorySettings: React.FC = () => {
               items={orderedCategories.map((c) => c.id)}
               strategy={verticalListSortingStrategy}
             >
-              {orderedCategories.map((category) => (
+              {orderedCategories.map((category, index) => (
                 <SortableCategoryRow
                   key={category.id}
                   category={category}
+                  index={index}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   onToggle={handleToggleActive}
@@ -361,67 +313,13 @@ export const WorkTypeCategorySettings: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </div>
-
             <div className="space-y-2">
-              <Label>Color</Label>
-              <div className="flex flex-wrap gap-2">
-                {COLOR_OPTIONS.map((color) => (
-                  <button
-                    key={color.value}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, color: color.value })}
-                    className={`w-8 h-8 rounded-full border-2 transition-all ${
-                      formData.color === color.value
-                        ? 'border-foreground scale-110'
-                        : 'border-transparent'
-                    }`}
-                    style={{ backgroundColor: color.value }}
-                    title={color.label}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Icon</Label>
-              <div className="flex flex-wrap gap-2">
-                {ICON_OPTIONS.map((iconOpt) => {
-                  const IconComp = iconOpt.icon;
-                  return (
-                    <button
-                      key={iconOpt.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, icon: iconOpt.value })}
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-all ${
-                        formData.icon === iconOpt.value
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                      title={iconOpt.label}
-                    >
-                      <IconComp
-                        className="w-5 h-5"
-                        style={{
-                          color: formData.icon === iconOpt.value ? formData.color : undefined,
-                        }}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="p-4 rounded-lg bg-muted/50">
-              <Label className="text-xs text-muted-foreground">Preview</Label>
-              <div className="flex items-center gap-3 mt-2">
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center"
-                  style={{ backgroundColor: `${formData.color}20` }}
-                >
-                  <SelectedIcon className="w-5 h-5" style={{ color: formData.color }} />
-                </div>
-                <span className="font-medium">{formData.name || 'Category Name'}</span>
-              </div>
+              <Label>Description</Label>
+              <Input
+                placeholder="Optional description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -453,67 +351,12 @@ export const WorkTypeCategorySettings: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </div>
-
             <div className="space-y-2">
-              <Label>Color</Label>
-              <div className="flex flex-wrap gap-2">
-                {COLOR_OPTIONS.map((color) => (
-                  <button
-                    key={color.value}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, color: color.value })}
-                    className={`w-8 h-8 rounded-full border-2 transition-all ${
-                      formData.color === color.value
-                        ? 'border-foreground scale-110'
-                        : 'border-transparent'
-                    }`}
-                    style={{ backgroundColor: color.value }}
-                    title={color.label}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Icon</Label>
-              <div className="flex flex-wrap gap-2">
-                {ICON_OPTIONS.map((iconOpt) => {
-                  const IconComp = iconOpt.icon;
-                  return (
-                    <button
-                      key={iconOpt.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, icon: iconOpt.value })}
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-all ${
-                        formData.icon === iconOpt.value
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                      title={iconOpt.label}
-                    >
-                      <IconComp
-                        className="w-5 h-5"
-                        style={{
-                          color: formData.icon === iconOpt.value ? formData.color : undefined,
-                        }}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="p-4 rounded-lg bg-muted/50">
-              <Label className="text-xs text-muted-foreground">Preview</Label>
-              <div className="flex items-center gap-3 mt-2">
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center"
-                  style={{ backgroundColor: `${formData.color}20` }}
-                >
-                  <SelectedIcon className="w-5 h-5" style={{ color: formData.color }} />
-                </div>
-                <span className="font-medium">{formData.name || 'Category Name'}</span>
-              </div>
+              <Label>Description</Label>
+              <Input
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -530,23 +373,19 @@ export const WorkTypeCategorySettings: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
+      {/* Delete Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Category</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{selectedCategory?.name}"? Work types using this
-              category will be set to "General".
+              Are you sure you want to delete "{selectedCategory?.name}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteCategory.isPending ? 'Deleting...' : 'Delete'}
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

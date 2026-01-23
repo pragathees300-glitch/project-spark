@@ -246,13 +246,10 @@ export const USDWalletPayment: React.FC<USDWalletPaymentProps> = ({
 
       // Create crypto payment record with proof
       await createPayment({
-        wallet_name: selectedWallet.name,
-        wallet_address: selectedWallet.address,
+        wallet_id: selectedWallet.id !== 'legacy' ? selectedWallet.id : undefined,
         amount: parseFloat(paymentAmount),
-        currency_symbol: selectedWallet.symbol,
         transaction_hash: transactionHash || undefined,
-        order_id: orderId,
-        payment_proof_url: proofUrl || undefined,
+        proof_url: proofUrl || undefined,
       });
 
       if (onPaid) {

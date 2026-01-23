@@ -39,6 +39,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const withTimeout = useCallback(<T,>(promise: Promise<T>, ms: number, label: string) => {
+    return new Promise<T>((resolve, reject) => {
+      const id = window.setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      promise
+        .then((v) => {
+          window.clearTimeout(id);
+          resolve(v);
+        })
+        .catch((e) => {
+          window.clearTimeout(id);
+          reject(e);
+        });
+    });
+  }, []);
+
   const signOutAndClear = useCallback(async () => {
     try {
       await supabase.auth.signOut();
@@ -66,37 +81,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
 
-      // Fetch user role - try multiple times if needed
-      let roleData = null;
-      let roleError = null;
-      
-      // Attempt to fetch role with retry for newly created users
+      // Fetch user roles (robust to multiple roles)
+      let roles: Array<{ role: string }> | null = null;
+      let rolesError: any = null;
+
       for (let attempt = 0; attempt < 3; attempt++) {
         const result = await supabase
           .from('user_roles')
           .select('role')
-          .eq('user_id', userId)
-          .maybeSingle();
-        
-        roleData = result.data;
-        roleError = result.error;
-        
-        if (roleData || !roleError) break;
-        
-        // Wait briefly before retry
-        await new Promise(resolve => setTimeout(resolve, 200));
+          .eq('user_id', userId);
+
+        roles = result.data as any;
+        rolesError = result.error;
+
+        if (!rolesError) break;
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
 
-      if (roleError) {
-        console.error('Error fetching role after retries:', roleError);
+      if (rolesError) {
+        console.error('Error fetching roles after retries:', rolesError);
+        return null; // fail closed: never guess role on error
       }
 
-      // Safely extract role, defaulting to 'user' only if no data exists
-      const role: UserRole = (roleData?.role === 'admin' || roleData?.role === 'user') 
-        ? roleData.role 
-        : 'user';
-      
-      console.log('User role fetched:', { userId, role, roleData });
+      const role: UserRole = (roles || []).some((r) => r.role === 'admin') ? 'admin' : 'user';
 
       return {
         id: userId,
@@ -152,22 +159,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (currentSession?.user) {
           // Defer Supabase calls with setTimeout to prevent deadlock
           setTimeout(async () => {
-            const userProfile = await fetchUserProfile(currentSession.user.id);
+            try {
+              const userProfile = await withTimeout(
+                fetchUserProfile(currentSession.user.id),
+                8000,
+                'fetchUserProfile'
+              );
 
-            if (!userProfile) {
+              if (!userProfile) {
+                await signOutAndClear();
+                setIsLoading(false);
+                return;
+              }
+
+              if (userProfile.userStatus === 'disabled' || (!userProfile.isActive && userProfile.role === 'user')) {
+                await signOutAndClear();
+                setIsLoading(false);
+                return;
+              }
+
+              setUser(userProfile);
+              setIsLoading(false);
+            } catch (e) {
+              console.error('Auth init failed:', e);
               await signOutAndClear();
               setIsLoading(false);
-              return;
             }
-
-            if (userProfile.userStatus === 'disabled' || (!userProfile.isActive && userProfile.role === 'user')) {
-              await signOutAndClear();
-              setIsLoading(false);
-              return;
-            }
-
-            setUser(userProfile);
-            setIsLoading(false);
           }, 0);
         } else {
           setUser(null);
@@ -181,29 +198,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(existingSession);
 
       if (existingSession?.user) {
-        const userProfile = await fetchUserProfile(existingSession.user.id);
+        try {
+          const userProfile = await withTimeout(
+            fetchUserProfile(existingSession.user.id),
+            8000,
+            'fetchUserProfile'
+          );
 
-        if (!userProfile) {
+          if (!userProfile) {
+            await signOutAndClear();
+            setIsLoading(false);
+            return;
+          }
+
+          if (userProfile.userStatus === 'disabled' || (!userProfile.isActive && userProfile.role === 'user')) {
+            await signOutAndClear();
+            setIsLoading(false);
+            return;
+          }
+
+          setUser(userProfile);
+          setIsLoading(false);
+        } catch (e) {
+          console.error('Session restore failed:', e);
           await signOutAndClear();
           setIsLoading(false);
-          return;
         }
-
-        if (userProfile.userStatus === 'disabled' || (!userProfile.isActive && userProfile.role === 'user')) {
-          await signOutAndClear();
-          setIsLoading(false);
-          return;
-        }
-
-        setUser(userProfile);
-        setIsLoading(false);
       } else {
         setIsLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchUserProfile, signOutAndClear]);
+  }, [fetchUserProfile, signOutAndClear, withTimeout]);
 
   // Listen for force logout events in real-time
   useEffect(() => {

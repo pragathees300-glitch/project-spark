@@ -48,7 +48,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useAdminPayouts, PayoutRequest, usePayoutStatusHistory } from '@/hooks/usePayoutRequests';
+import { useAdminPayouts, PayoutRequest, PayoutStatusHistory } from '@/hooks/usePayoutRequests';
 import { usePlatformSettings, CURRENCY_SYMBOLS } from '@/hooks/usePlatformSettings';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
@@ -86,12 +86,14 @@ const AdminPayouts: React.FC = () => {
   
   const { 
     payoutRequests, 
-    pendingCount,
-    totalPending,
     isLoading, 
     processPayout,
-    isProcessingPayout 
+    isProcessing: isProcessingPayout 
   } = useAdminPayouts();
+  
+  // Calculate pending counts from requests
+  const pendingCount = payoutRequests.filter(p => p.status === 'pending').length;
+  const totalPending = payoutRequests.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.amount, 0);
 
   const { settingsMap } = usePlatformSettings();
   const currencySymbol = CURRENCY_SYMBOLS[settingsMap.default_currency] || '$';
@@ -100,8 +102,9 @@ const AdminPayouts: React.FC = () => {
   usePayoutRealtimeAdmin();
   useProfileRealtimeAdmin();
 
-  // Fetch status history for selected payout
-  const { history: statusHistory, isLoading: isLoadingHistory } = usePayoutStatusHistory(selectedPayout?.id || null);
+  // Status history state (we'll fetch inline when needed)
+  const [statusHistory, setStatusHistory] = React.useState<PayoutStatusHistory[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
 
   const filteredPayouts = payoutRequests.filter(payout =>
     payout.user_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||

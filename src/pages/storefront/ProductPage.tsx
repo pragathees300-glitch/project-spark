@@ -67,13 +67,14 @@ const ProductPage = () => {
         .select(`
           id,
           product_id,
-          selling_price,
+          custom_price,
           custom_description,
           is_active,
           user_id,
           products!inner(
             id,
             name,
+            base_price,
             description,
             image_url,
             category,
@@ -98,11 +99,12 @@ const ProductPage = () => {
         .single();
 
       const productsData = data.products as unknown as ProductDetails['product'];
+      const basePrice = (data.products as any)?.base_price || 0;
 
       return {
         id: data.id,
         product_id: data.product_id,
-        selling_price: Number(data.selling_price),
+        selling_price: Number(data.custom_price || basePrice),
         custom_description: data.custom_description,
         is_active: data.is_active,
         user_id: data.user_id,

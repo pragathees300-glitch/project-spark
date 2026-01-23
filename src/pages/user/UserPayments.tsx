@@ -236,13 +236,17 @@ const UserPayments: React.FC = () => {
   const totalOrderValue = orders.reduce((sum, o) => sum + (o.selling_price * o.quantity), 0);
   const totalProfit = stats.totalRevenue;
 
-  // Load saved payment details from profile
+  // Load saved payment details from localStorage since the column doesn't exist
   useEffect(() => {
-    if (profile?.saved_payment_details) {
-      const details = profile.saved_payment_details as typeof savedPaymentDetails;
-      setSavedPaymentDetails(details);
+    try {
+      const saved = localStorage.getItem('saved_payment_details');
+      if (saved) {
+        setSavedPaymentDetails(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error('Failed to load saved payment details:', e);
     }
-  }, [profile]);
+  }, []);
 
   // Apply saved details when checkbox is toggled
   useEffect(() => {
@@ -433,7 +437,7 @@ const UserPayments: React.FC = () => {
       paymentDetails.ifsc_code = ifscCode;
       paymentDetails.bank_statement_path = bankStatementUrl;
       
-      // Save bank details to profile if checkbox is checked
+      // Save bank details to localStorage
       if (savePaymentDetails && user) {
         const newSavedDetails = {
           ...savedPaymentDetails,
@@ -445,10 +449,7 @@ const UserPayments: React.FC = () => {
             branchName: ifscValidation.branch
           }
         };
-        await supabase
-          .from('profiles')
-          .update({ saved_payment_details: newSavedDetails })
-          .eq('user_id', user.id);
+        localStorage.setItem('saved_payment_details', JSON.stringify(newSavedDetails));
         setSavedPaymentDetails(newSavedDetails);
       }
     }
@@ -464,16 +465,13 @@ const UserPayments: React.FC = () => {
       }
       paymentDetails.upi_id = upiId;
       
-      // Save UPI details to profile if checkbox is checked
+      // Save UPI details to localStorage
       if (savePaymentDetails && user) {
         const newSavedDetails = {
           ...savedPaymentDetails,
           upi: { upiId }
         };
-        await supabase
-          .from('profiles')
-          .update({ saved_payment_details: newSavedDetails })
-          .eq('user_id', user.id);
+        localStorage.setItem('saved_payment_details', JSON.stringify(newSavedDetails));
         setSavedPaymentDetails(newSavedDetails);
       }
     }
@@ -528,16 +526,13 @@ const UserPayments: React.FC = () => {
         paymentDetails.attachment_path = cryptoAttachmentUrl;
       }
       
-      // Save crypto wallet to profile if checkbox is checked
+      // Save crypto wallet to localStorage
       if (savePaymentDetails && user) {
         const newSavedDetails = {
           ...savedPaymentDetails,
           crypto: { walletAddress: cryptoWalletAddress }
         };
-        await supabase
-          .from('profiles')
-          .update({ saved_payment_details: newSavedDetails })
-          .eq('user_id', user.id);
+        localStorage.setItem('saved_payment_details', JSON.stringify(newSavedDetails));
         setSavedPaymentDetails(newSavedDetails);
       }
     }
@@ -571,10 +566,10 @@ const UserPayments: React.FC = () => {
       // Log the blocked attempt for audit
       try {
         await supabase.from('audit_logs').insert({
-          action_type: 'payout_blocked_pending_payment',
+          action: 'payout_blocked_pending_payment',
           entity_type: 'payout_request',
           user_id: user?.id,
-          metadata: {
+          new_data: {
             pending_order_count: pendingPaymentCount,
             attempted_action: 'request_payout',
             block_reason: 'Pending order payments',

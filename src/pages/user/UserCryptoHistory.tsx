@@ -168,29 +168,29 @@ const UserCryptoHistory: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payments.map((payment) => {
+                  {payments.map((payment) => {
                       const explorerUrl = payment.transaction_hash 
-                        ? getBlockchainExplorerUrl(payment.transaction_hash, payment.wallet_name)
+                        ? getBlockchainExplorerUrl(payment.transaction_hash, payment.wallet_id || 'unknown')
                         : null;
 
                       return (
                         <TableRow key={payment.id}>
                           <TableCell>
                             <span className="font-medium text-primary">
-                              {payment.order_number || 'N/A'}
+                              #{payment.id.slice(0, 8)}
                             </span>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="font-medium">{payment.wallet_name}</span>
+                              <span className="font-medium">{payment.wallet_id || 'N/A'}</span>
                               <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px]">
-                                {payment.wallet_address.slice(0, 8)}...{payment.wallet_address.slice(-6)}
+                                -
                               </span>
                             </div>
                           </TableCell>
                           <TableCell>
                             <span className="font-semibold text-primary">
-                              {payment.currency_symbol}{payment.amount.toFixed(2)}
+                              ${payment.amount.toFixed(2)}
                             </span>
                           </TableCell>
                           <TableCell>
@@ -234,11 +234,6 @@ const UserCryptoHistory: React.FC = () => {
                           <TableCell>
                             <div className="space-y-1">
                               {getStatusBadge(payment.status)}
-                              {payment.admin_notes && payment.status !== 'pending' && (
-                                <p className="text-xs text-muted-foreground max-w-[150px] truncate" title={payment.admin_notes}>
-                                  {payment.admin_notes}
-                                </p>
-                              )}
                             </div>
                           </TableCell>
                           <TableCell>

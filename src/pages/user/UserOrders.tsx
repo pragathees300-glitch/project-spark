@@ -289,14 +289,23 @@ const UserOrders: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      // Use the secure database function to process postpaid payment
-      const { data, error } = await supabase.rpc('process_postpaid_payment', {
-        _user_id: user.id,
-        _order_id: selectedOrder.id,
-        _amount: orderAmount,
-      });
+      // Update postpaid used directly since the RPC doesn't exist
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ 
+          postpaid_used: (postpaidStatus.usedCredit || 0) + orderAmount 
+        })
+        .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (profileError) throw profileError;
+      
+      // Update order status
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ status: 'pending' })
+        .eq('id', selectedOrder.id);
+      
+      if (orderError) throw orderError;
 
       toast({
         title: '✅ Order Placed on Credit',

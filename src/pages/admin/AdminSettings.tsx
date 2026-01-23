@@ -1898,10 +1898,10 @@ const AdminSettings: React.FC = () => {
             ) : (
               <ScrollArea className="h-[300px] pr-4">
                 <div className="space-y-3">
-                  {settingsLogs.map((log) => {
-                    const settingKey = log.new_value ? Object.keys(log.new_value)[0] : 'unknown';
-                    const newValue = log.new_value ? Object.values(log.new_value)[0] : null;
-                    const oldValue = log.old_value ? Object.values(log.old_value)[0] : null;
+              {settingsLogs.map((log) => {
+                    const settingKey = log.new_data ? Object.keys(log.new_data)[0] : 'unknown';
+                    const newValue = log.new_data ? Object.values(log.new_data)[0] : null;
+                    const oldValue = log.old_data ? Object.values(log.old_data)[0] : null;
                     
                     // Format display values
                     const formatValue = (val: any) => {

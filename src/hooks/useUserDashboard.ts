@@ -68,78 +68,43 @@ export const useUserDashboard = () => {
     queryFn: async () => {
       if (!user?.id) return [];
 
-      // Fetch orders directly from the orders table
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          order_number,
-          storefront_product_id,
-          dropshipper_user_id,
-          customer_name,
-          customer_email,
-          customer_phone,
-          customer_address,
-          quantity,
-          selling_price,
-          base_price,
-          status,
-          created_at,
-          updated_at,
-          paid_at,
-          completed_at,
-          payment_link,
-          payment_link_clicked_at,
-          storefront_products!storefront_product_id(
-            id,
-            product_id,
-            products!product_id(
-              id,
-              name,
-              image_url,
-              base_price
-            )
-          )
-        `)
-        .eq('dropshipper_user_id', user.id)
-        .order('created_at', { ascending: false });
+      // Use the masked RPC function to protect customer PII
+      const { data: maskedOrders, error: maskedError } = await supabase
+        .rpc('get_dropshipper_orders_masked');
 
-      if (ordersError) {
-        console.error('Error fetching orders:', ordersError);
-        throw ordersError;
+      if (maskedError) {
+        console.error('Error fetching masked orders:', maskedError);
+        throw maskedError;
       }
 
-      // Transform data to match expected format
-      return (ordersData || []).map((order: any): DashboardOrder => {
-        const storefrontProduct = order.storefront_products;
-        const product = storefrontProduct?.products;
-        return {
-          id: order.id,
-          order_number: order.order_number,
-          storefront_product_id: order.storefront_product_id,
-          dropshipper_user_id: order.dropshipper_user_id,
-          customer_name: order.customer_name,
-          customer_email: order.customer_email,
-          customer_phone: order.customer_phone,
-          customer_address: order.customer_address,
-          quantity: order.quantity,
-          selling_price: Number(order.selling_price),
-          base_price: Number(order.base_price),
-          status: order.status,
-          created_at: order.created_at,
-          paid_at: order.paid_at,
-          completed_at: order.completed_at,
-          payment_link: order.payment_link,
-          payment_link_updated_at: order.updated_at,
-          payment_link_clicked_at: order.payment_link_clicked_at,
-          product: product ? {
-            id: product.id,
-            name: product.name,
-            image_url: product.image_url,
-            base_price: Number(product.base_price),
-          } : null,
-        };
-      });
+      // Transform data to match expected format with masked customer data
+      return (maskedOrders || []).map((order: any): DashboardOrder => ({
+        id: order.id,
+        order_number: order.order_number,
+        storefront_product_id: order.storefront_product_id,
+        dropshipper_user_id: order.dropshipper_user_id,
+        // Use masked customer data for privacy
+        customer_name: order.customer_name_masked,
+        customer_email: order.customer_email_masked,
+        customer_phone: order.customer_phone_masked,
+        customer_address: order.customer_address_masked,
+        quantity: order.quantity,
+        selling_price: Number(order.selling_price),
+        base_price: Number(order.base_price),
+        status: order.status,
+        created_at: order.created_at,
+        paid_at: order.paid_at,
+        completed_at: order.completed_at,
+        payment_link: order.payment_link,
+        payment_link_updated_at: order.updated_at,
+        payment_link_clicked_at: order.payment_link_clicked_at,
+        product: order.product_id ? {
+          id: order.product_id,
+          name: order.product_name,
+          image_url: order.product_image_url,
+          base_price: Number(order.product_base_price),
+        } : null,
+      }));
     },
     enabled: !!user?.id && !!session,
   });

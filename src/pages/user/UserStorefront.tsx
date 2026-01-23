@@ -86,11 +86,11 @@ const UserStorefront: React.FC = () => {
       if (user?.id) {
         const { data } = await supabase
           .from('profiles')
-          .select('storefront_banner')
+          .select('storefront_banner_url')
           .eq('user_id', user.id)
           .maybeSingle();
-        if (data?.storefront_banner) {
-          setStorefrontBanner(data.storefront_banner);
+        if (data?.storefront_banner_url) {
+          setStorefrontBanner(data.storefront_banner_url);
         }
       }
     };

@@ -45,7 +45,11 @@ const AdminDashboard: React.FC = () => {
   const [chartType, setChartType] = useState<'bar' | 'candlestick'>('bar');
   const { orders, recentOrders, dropshippers, stats, isLoading, refetchOrders } = useAdminDashboard();
   const { kycSubmissions } = useAdminKYC();
-  const { pendingCount: pendingPayouts, totalPending: totalPendingPayouts } = useAdminPayouts();
+  const { payoutRequests } = useAdminPayouts();
+  
+  // Calculate pending payouts from the requests
+  const pendingPayouts = payoutRequests.filter(p => p.status === 'pending').length;
+  const totalPendingPayouts = payoutRequests.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.amount, 0);
   const { settingsMap } = usePlatformSettings();
   
   // Enable real-time updates with order notifications

@@ -81,8 +81,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
 
-      // Fetch user roles (robust to multiple roles)
-      let roles: Array<{ role: string }> | null = null;
+      // Fetch user roles (robust to multiple roles, with retry)
+      let roles: Array<{ role: string }> = [];
       let rolesError: any = null;
 
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -91,19 +91,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .select('role')
           .eq('user_id', userId);
 
-        roles = result.data as any;
+        roles = (result.data as Array<{ role: string }>) || [];
         rolesError = result.error;
 
-        if (!rolesError) break;
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        if (!rolesError && roles.length > 0) break;
+        if (!rolesError && roles.length === 0) {
+          // No role row yet – could be new user before trigger runs; don't retry
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
       }
 
       if (rolesError) {
         console.error('Error fetching roles after retries:', rolesError);
-        return null; // fail closed: never guess role on error
+        // Default to 'user' on error so account isn't locked out; admin access requires confirmed fetch
       }
 
-      const role: UserRole = (roles || []).some((r) => r.role === 'admin') ? 'admin' : 'user';
+      // Only grant admin if we positively confirmed the role
+      const role: UserRole = roles.some((r) => r.role === 'admin') ? 'admin' : 'user';
+      console.log('Role resolved:', { userId, role, rolesCount: roles.length });
 
       return {
         id: userId,

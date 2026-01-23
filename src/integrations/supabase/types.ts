@@ -2306,6 +2306,7 @@ export type Database = {
           updated_at: string
         }[]
       }
+      reconcile_profile_and_roles_by_email: { Args: never; Returns: Json }
     }
     Enums: {
       [_ in never]: never

@@ -227,13 +227,10 @@ export const PostpaidSidePanel: React.FC<PostpaidSidePanelProps> = ({ open, onOp
       }
 
       await createPayment({
-        wallet_name: selectedWallet.name,
-        wallet_address: selectedWallet.address,
+        wallet_id: selectedWallet.id !== 'legacy' ? selectedWallet.id : undefined,
         amount: parseFloat(usdtAmount),
-        currency_symbol: selectedWallet.symbol,
         transaction_hash: transactionHash || undefined,
-        payment_purpose: 'postpaid',
-        payment_proof_url: proofUrl,
+        proof_url: proofUrl,
       });
 
       setIsPayDialogOpen(false);

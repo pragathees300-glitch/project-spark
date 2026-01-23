@@ -31,8 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Pencil, Trash2, GripVertical, Briefcase, Star } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Plus, Pencil, Trash2, GripVertical, Briefcase, FolderOpen } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -56,23 +55,23 @@ import {
   useUpdateWorkType,
   useDeleteWorkType,
   useReorderWorkTypes,
-  useSetDefaultWorkType,
   WorkType,
 } from '@/hooks/useWorkTypes';
-import { useAllCategories, useCategoryColorMap } from '@/hooks/useWorkTypeCategories';
-import { getIconComponent } from '@/components/admin/WorkTypeCategorySettings';
+import { useAllCategories } from '@/hooks/useWorkTypeCategories';
+
+// Default colors for display
+const DEFAULT_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6'];
 
 interface SortableRowProps {
   workType: WorkType;
+  categoryName?: string;
   categoryColor?: string;
-  categoryIcon?: string;
   onEdit: (wt: WorkType) => void;
   onDelete: (wt: WorkType) => void;
   onToggle: (wt: WorkType) => void;
-  onSetDefault: (wt: WorkType) => void;
 }
 
-const SortableRow: React.FC<SortableRowProps> = ({ workType, categoryColor, categoryIcon, onEdit, onDelete, onToggle, onSetDefault }) => {
+const SortableRow: React.FC<SortableRowProps> = ({ workType, categoryName, categoryColor, onEdit, onDelete, onToggle }) => {
   const {
     attributes,
     listeners,
@@ -88,7 +87,6 @@ const SortableRow: React.FC<SortableRowProps> = ({ workType, categoryColor, cate
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const IconComponent = getIconComponent(categoryIcon || null);
   const color = categoryColor || '#6366f1';
 
   return (
@@ -108,20 +106,16 @@ const SortableRow: React.FC<SortableRowProps> = ({ workType, categoryColor, cate
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium truncate">{workType.name}</span>
-          {workType.is_default && (
-            <Badge className="text-xs shrink-0 gap-1 bg-amber-500/10 text-amber-600 border-amber-500/20">
-              <Star className="w-3 h-3 fill-current" />
-              Default
+          {categoryName && (
+            <Badge 
+              variant="outline" 
+              className="text-xs shrink-0 gap-1"
+              style={{ borderColor: color, color: color }}
+            >
+              <FolderOpen className="w-3 h-3" />
+              {categoryName}
             </Badge>
           )}
-          <Badge 
-            variant="outline" 
-            className="text-xs shrink-0 gap-1"
-            style={{ borderColor: color, color: color }}
-          >
-            <IconComponent className="w-3 h-3" />
-            {workType.category || 'General'}
-          </Badge>
         </div>
         {workType.description && (
           <p className="text-xs text-muted-foreground truncate">{workType.description}</p>
@@ -129,29 +123,12 @@ const SortableRow: React.FC<SortableRowProps> = ({ workType, categoryColor, cate
       </div>
 
       <Switch
-        checked={workType.is_active}
+        checked={workType.is_active ?? true}
         onCheckedChange={() => onToggle(workType)}
         className="shrink-0"
       />
 
       <div className="flex items-center gap-1 shrink-0">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => onSetDefault(workType)}
-                className={workType.is_default ? "text-amber-500" : "text-muted-foreground hover:text-amber-500"}
-              >
-                <Star className={`w-4 h-4 ${workType.is_default ? 'fill-current' : ''}`} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {workType.is_default ? 'Current default' : 'Set as default'}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
         <Button variant="ghost" size="icon" onClick={() => onEdit(workType)}>
           <Pencil className="w-4 h-4" />
         </Button>
@@ -171,23 +148,26 @@ const SortableRow: React.FC<SortableRowProps> = ({ workType, categoryColor, cate
 export const WorkTypeSettings: React.FC = () => {
   const { data: workTypes, isLoading } = useAllWorkTypes();
   const { data: categories } = useAllCategories();
-  const categoryColorMap = useCategoryColorMap();
   const createWorkType = useCreateWorkType();
   const updateWorkType = useUpdateWorkType();
   const deleteWorkType = useDeleteWorkType();
   const reorderWorkTypes = useReorderWorkTypes();
-  const setDefaultWorkType = useSetDefaultWorkType();
 
   const [orderedTypes, setOrderedTypes] = useState<WorkType[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedWorkType, setSelectedWorkType] = useState<WorkType | null>(null);
-  const [formData, setFormData] = useState({ name: '', description: '', category: 'General' });
-  const [customCategory, setCustomCategory] = useState('');
-  const [useCustomCategory, setUseCustomCategory] = useState(false);
+  const [formData, setFormData] = useState({ name: '', description: '', category_id: '' });
 
-  const allCategories = categories?.map(c => c.name) || ['General'];
+  // Build category map for display
+  const categoryMap = new Map<string, { name: string; color: string }>();
+  categories?.forEach((cat, index) => {
+    categoryMap.set(cat.id, {
+      name: cat.name,
+      color: DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+    });
+  });
 
   useEffect(() => {
     if (workTypes) {
@@ -216,23 +196,17 @@ export const WorkTypeSettings: React.FC = () => {
   };
 
   const handleAdd = () => {
-    setFormData({ name: '', description: '', category: 'General' });
-    setCustomCategory('');
-    setUseCustomCategory(false);
+    setFormData({ name: '', description: '', category_id: '' });
     setIsAddDialogOpen(true);
   };
 
   const handleEdit = (workType: WorkType) => {
     setSelectedWorkType(workType);
-    const category = workType.category || 'General';
-    const isCustom = !allCategories.includes(category);
     setFormData({ 
       name: workType.name, 
       description: workType.description || '',
-      category: isCustom ? 'custom' : category,
+      category_id: workType.category_id || '',
     });
-    setCustomCategory(isCustom ? category : '');
-    setUseCustomCategory(isCustom);
     setIsEditDialogOpen(true);
   };
 
@@ -244,20 +218,8 @@ export const WorkTypeSettings: React.FC = () => {
   const handleToggleActive = async (workType: WorkType) => {
     await updateWorkType.mutateAsync({
       id: workType.id,
-      is_active: !workType.is_active,
+      is_active: !(workType.is_active ?? true),
     });
-  };
-
-  const handleSetDefault = async (workType: WorkType) => {
-    if (workType.is_default) return;
-    await setDefaultWorkType.mutateAsync(workType.id);
-  };
-
-  const getSelectedCategory = () => {
-    if (formData.category === 'custom' || useCustomCategory) {
-      return customCategory.trim() || 'General';
-    }
-    return formData.category;
   };
 
   const submitAdd = async () => {
@@ -265,7 +227,7 @@ export const WorkTypeSettings: React.FC = () => {
     await createWorkType.mutateAsync({
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,
-      category: getSelectedCategory(),
+      category_id: formData.category_id || undefined,
     });
     setIsAddDialogOpen(false);
   };
@@ -276,7 +238,7 @@ export const WorkTypeSettings: React.FC = () => {
       id: selectedWorkType.id,
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,
-      category: getSelectedCategory(),
+      category_id: formData.category_id || undefined,
     });
     setIsEditDialogOpen(false);
   };
@@ -289,13 +251,11 @@ export const WorkTypeSettings: React.FC = () => {
 
   // Group work types by category
   const groupedWorkTypes = orderedTypes.reduce((acc, wt) => {
-    const cat = wt.category || 'General';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(wt);
+    const catId = wt.category_id || 'uncategorized';
+    if (!acc[catId]) acc[catId] = [];
+    acc[catId].push(wt);
     return acc;
   }, {} as Record<string, WorkType[]>);
-
-  const sortedCategories = Object.keys(groupedWorkTypes).sort();
 
   return (
     <Card>
@@ -306,7 +266,7 @@ export const WorkTypeSettings: React.FC = () => {
             <div>
               <CardTitle className="text-base">Work Types</CardTitle>
               <CardDescription>
-                Manage work type options with categories. Drag to reorder.
+                Manage work type options. Drag to reorder.
               </CardDescription>
             </div>
           </div>
@@ -330,39 +290,38 @@ export const WorkTypeSettings: React.FC = () => {
             onDragEnd={handleDragEnd}
           >
             <div className="space-y-4">
-              {sortedCategories.map((category) => {
-                const catInfo = categoryColorMap.get(category);
+              {Object.entries(groupedWorkTypes).map(([catId, types]) => {
+                const catInfo = categoryMap.get(catId);
+                const categoryName = catInfo?.name || (catId === 'uncategorized' ? 'Uncategorized' : catId);
                 const color = catInfo?.color || '#6366f1';
-                const IconComponent = getIconComponent(catInfo?.icon || null);
                 
                 return (
-                  <div key={category}>
+                  <div key={catId}>
                     <div className="flex items-center gap-2 mb-2">
                       <div 
                         className="w-6 h-6 rounded flex items-center justify-center"
                         style={{ backgroundColor: `${color}20` }}
                       >
-                        <IconComponent className="w-3.5 h-3.5" style={{ color }} />
+                        <FolderOpen className="w-3.5 h-3.5" style={{ color }} />
                       </div>
-                      <span className="text-sm font-medium" style={{ color }}>{category}</span>
+                      <span className="text-sm font-medium" style={{ color }}>{categoryName}</span>
                       <Badge variant="secondary" className="text-xs">
-                        {groupedWorkTypes[category].length}
+                        {types.length}
                       </Badge>
                     </div>
                     <SortableContext
-                      items={groupedWorkTypes[category].map((t) => t.id)}
+                      items={types.map((t) => t.id)}
                       strategy={verticalListSortingStrategy}
                     >
-                      {groupedWorkTypes[category].map((workType) => (
+                      {types.map((workType) => (
                         <SortableRow
                           key={workType.id}
                           workType={workType}
+                          categoryName={catInfo?.name}
                           categoryColor={catInfo?.color}
-                          categoryIcon={catInfo?.icon}
                           onEdit={handleEdit}
                           onDelete={handleDelete}
                           onToggle={handleToggleActive}
-                          onSetDefault={handleSetDefault}
                         />
                       ))}
                     </SortableContext>
@@ -402,36 +361,20 @@ export const WorkTypeSettings: React.FC = () => {
             <div className="space-y-2">
               <Label htmlFor="add-category">Category</Label>
               <Select
-                value={useCustomCategory ? 'custom' : formData.category}
-                onValueChange={(val) => {
-                  if (val === 'custom') {
-                    setUseCustomCategory(true);
-                  } else {
-                    setUseCustomCategory(false);
-                    setFormData({ ...formData, category: val });
-                  }
-                }}
+                value={formData.category_id}
+                onValueChange={(val) => setFormData({ ...formData, category_id: val })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder="Select category (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  {allCategories.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
+                  {categories?.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
                     </SelectItem>
                   ))}
-                  <SelectItem value="custom">+ Create New Category</SelectItem>
                 </SelectContent>
               </Select>
-              {useCustomCategory && (
-                <Input
-                  placeholder="Enter new category name"
-                  value={customCategory}
-                  onChange={(e) => setCustomCategory(e.target.value)}
-                  className="mt-2"
-                />
-              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="add-description">Description</Label>
@@ -476,36 +419,20 @@ export const WorkTypeSettings: React.FC = () => {
             <div className="space-y-2">
               <Label htmlFor="edit-category">Category</Label>
               <Select
-                value={useCustomCategory ? 'custom' : formData.category}
-                onValueChange={(val) => {
-                  if (val === 'custom') {
-                    setUseCustomCategory(true);
-                  } else {
-                    setUseCustomCategory(false);
-                    setFormData({ ...formData, category: val });
-                  }
-                }}
+                value={formData.category_id}
+                onValueChange={(val) => setFormData({ ...formData, category_id: val })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder="Select category (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  {allCategories.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
+                  {categories?.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
                     </SelectItem>
                   ))}
-                  <SelectItem value="custom">+ Create New Category</SelectItem>
                 </SelectContent>
               </Select>
-              {useCustomCategory && (
-                <Input
-                  placeholder="Enter new category name"
-                  value={customCategory}
-                  onChange={(e) => setCustomCategory(e.target.value)}
-                  className="mt-2"
-                />
-              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-description">Description</Label>
@@ -530,23 +457,19 @@ export const WorkTypeSettings: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
+      {/* Delete Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Work Type</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{selectedWorkType?.name}"? This action cannot be
-              undone.
+              Are you sure you want to delete "{selectedWorkType?.name}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteWorkType.isPending ? 'Deleting...' : 'Delete'}
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

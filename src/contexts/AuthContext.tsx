@@ -280,6 +280,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data.user) {
+        // Ensure the auth client is fully updated with the new session before making
+        // any authenticated PostgREST/RPC calls (prevents race conditions right after sign-in).
+        if (data.session?.access_token && data.session?.refresh_token) {
+          await supabase.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          });
+        }
+
         // Attempt to reconcile profile/roles if missing (handles edge case where auth user exists but profile is missing)
         try {
           await supabase.rpc('reconcile_profile_and_roles_by_email');
